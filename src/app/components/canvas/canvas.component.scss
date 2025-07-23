@@ -1,0 +1,40 @@
+.canvas-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 15px;
+  background-color: #f7f7f7;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  button {
+    padding: 8px 15px;
+    font-size: 14px;
+    color: #333;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+
+    &:hover {
+      background-color: #e9ecef;
+      border-color: #bbb;
+    }
+
+    &:active {
+      background-color: #dde2e6;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+  }
+}
+
+.canvas-wrapper {
+  border: 1px solid #d3d3d3;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+
+  canvas {
+    display: block;
+  }
+}
