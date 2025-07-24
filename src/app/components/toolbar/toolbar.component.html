@@ -1,0 +1,33 @@
+<div class="canvas-controls">
+  <button
+    (click)="addLine()"
+    [ngClass]="{ active: drawingService.drawingMode === 'addLine' }"
+  >
+    Add Line
+  </button>
+  <button (click)="addIsometricLine()">Add Isometric Line</button>
+  <button (click)="addArc()">Add Arc</button>
+  <button (click)="addValve()">Add Valve</button>
+  <button
+    (click)="startPiping()"
+    [ngClass]="{ active: drawingService.drawingMode === 'addPipe' }"
+  >
+    Verrohrung
+  </button>
+  <button (click)="groupSelectedObjects()">Group Selection</button>
+  <button (click)="ungroupObjects()">Ungroup</button>
+  <button (click)="addAnchors()">Add Anchors</button>
+  <button (click)="applyDimension()">Apply Dimension</button>
+  <button
+    (click)="setDimensionMode()"
+    [ngClass]="{ active: drawingService.drawingMode === 'dimension' }"
+  >
+    Bemaßung
+  </button>
+  <button
+    (click)="addText()"
+    [ngClass]="{ active: drawingService.drawingMode === 'text' }"
+  >
+    Add Text
+  </button>
+</div>

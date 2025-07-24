@@ -1,0 +1,9 @@
+.canvas-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.canvas-controls button.active {
+  background-color: #ccc;
+}
