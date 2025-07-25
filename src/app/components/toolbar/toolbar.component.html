@@ -1,33 +1,13 @@
-<div class="canvas-controls">
-  <button
-    (click)="addLine()"
-    [ngClass]="{ active: drawingService.drawingMode === 'addLine' }"
-  >
-    Add Line
-  </button>
-  <button (click)="addIsometricLine()">Add Isometric Line</button>
-  <button (click)="addArc()">Add Arc</button>
-  <button (click)="addValve()">Add Valve</button>
-  <button
-    (click)="startPiping()"
-    [ngClass]="{ active: drawingService.drawingMode === 'addPipe' }"
-  >
-    Verrohrung
-  </button>
-  <button (click)="groupSelectedObjects()">Group Selection</button>
-  <button (click)="ungroupObjects()">Ungroup</button>
-  <button (click)="addAnchors()">Add Anchors</button>
-  <button (click)="applyDimension()">Apply Dimension</button>
-  <button
-    (click)="setDimensionMode()"
-    [ngClass]="{ active: drawingService.drawingMode === 'dimension' }"
-  >
-    Bemaßung
-  </button>
-  <button
-    (click)="addText()"
-    [ngClass]="{ active: drawingService.drawingMode === 'text' }"
-  >
-    Add Text
-  </button>
+<div class="toolbar">
+  <button (click)="addLine()" class="btn btn-primary">Add Line</button>
+  <button (click)="startPiping()" class="btn btn-secondary">Add Pipe</button>
+  <button (click)="addText()" class="btn btn-info">Add Text</button>
+  <button (click)="setDimensionMode()" class="btn btn-warning">Dimension</button>
+  <button (click)="addIsometricLine()" class="btn btn-success">Iso Line</button>
+  <button (click)="addArc()" class="btn btn-success">Add Arc</button>
+  <button (click)="addValve()" class="btn btn-success">Add Valve</button>
+  <button (click)="groupSelectedObjects()" class="btn btn-dark">Group</button>
+  <button (click)="ungroupObjects()" class="btn btn-dark">Ungroup</button>
+  <button (click)="addAnchors()" class="btn btn-light">Anchors</button>
+  <button (click)="applyDimension()" class="btn btn-light">Apply Dim</button>
 </div>

@@ -3,14 +3,23 @@ import { CanvasComponent } from './components/canvas/canvas.component';
 import { ToolbarComponent } from './components/toolbar/toolbar.component';
 import { DrawingService } from './services/drawing.service';
 import { IsometryService } from './services/isometry.service';
+import { LineDrawingService } from './services/line-drawing.service';
+import { DimensionService } from './services/dimension.service';
+import { ObjectManagementService } from './services/object-management.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CanvasComponent, ToolbarComponent], // Import the standalone CanvasComponent directly
+  imports: [CanvasComponent, ToolbarComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
-  providers: [DrawingService, IsometryService],
+  providers: [
+    DrawingService,
+    IsometryService,
+    LineDrawingService,
+    DimensionService,
+    ObjectManagementService
+  ],
 })
 export class AppComponent {
   title = 'isometrics-app';

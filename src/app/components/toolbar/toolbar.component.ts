@@ -1,7 +1,9 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DrawingService } from '../../services/drawing.service';
-import { IsometryService } from '../../services/isometry.service';
+import { LineDrawingService } from '../../services/line-drawing.service';
+import { DimensionService } from '../../services/dimension.service';
+import { ObjectManagementService } from '../../services/object-management.service';
 
 @Component({
   selector: 'app-toolbar',
@@ -13,7 +15,9 @@ import { IsometryService } from '../../services/isometry.service';
 export class ToolbarComponent {
   constructor(
     public drawingService: DrawingService,
-    private isometryService: IsometryService
+    private lineDrawingService: LineDrawingService,
+    private dimensionService: DimensionService,
+    private objectManagementService: ObjectManagementService
   ) {}
 
   public addLine(): void {
@@ -21,17 +25,17 @@ export class ToolbarComponent {
   }
 
   public addIsometricLine(): void {
-    // this.isometryService.setNextAction('iso-line');
+    this.drawingService.addIsometricLine();
     this.drawingService.requestRedraw();
   }
 
   public addArc(): void {
-    // this.isometryService.setNextAction('arc');
+    this.drawingService.addArc();
     this.drawingService.requestRedraw();
   }
 
   public addValve(): void {
-    // this.isometryService.setNextAction('valve');
+    this.drawingService.addValve();
     this.drawingService.requestRedraw();
   }
 
@@ -51,18 +55,17 @@ export class ToolbarComponent {
   }
 
   public addAnchors(): void {
-    // this.isometryService.setNextAction('anchor');
     this.drawingService.requestRedraw();
   }
 
   public applyDimension(): void {
-    // this.isometryService.setNextAction('dimension');
     this.drawingService.requestRedraw();
   }
 
   public setDimensionMode(): void {
     this.drawingService.startDimensioning();
   }
+
   public addText(): void {
     this.drawingService.startTextMode();
   }

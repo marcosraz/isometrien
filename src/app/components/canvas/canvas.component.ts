@@ -10,6 +10,8 @@ import { CommonModule } from '@angular/common';
 import * as fabric from 'fabric';
 import { Subscription } from 'rxjs';
 import { DrawingService } from '../../services/drawing.service';
+import { LineDrawingService } from '../../services/line-drawing.service';
+import { DimensionService } from '../../services/dimension.service';
 
 @Component({
   selector: 'app-canvas',
@@ -24,7 +26,11 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
   private _keyDownHandler: (event: KeyboardEvent) => void;
   private redrawSubscription!: Subscription;
 
-  constructor(private drawingService: DrawingService) {
+  constructor(
+    private drawingService: DrawingService,
+    private lineDrawingService: LineDrawingService,
+    private dimensionService: DimensionService
+  ) {
     this._keyDownHandler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         this.drawingService.cancelDrawing();
