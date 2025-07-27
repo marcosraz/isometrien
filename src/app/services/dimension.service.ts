@@ -44,60 +44,42 @@ export class DimensionService {
         ) {
           const secondAnchorPoint = options.target;
           console.log(
-            'Zweiter Punkt ausgewählt. Bemaßung wird erstellt. Positionieren und klicken zum fixieren.'
+            'Zweiter Punkt ausgewählt. Bemaßung wird erstellt und fixiert.'
           );
           this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
-          this.dimensionStep = 'position';
-          const pointer = canvas.getPointer(options.e);
-          this.dimensionDragStartPoint = { x: pointer.x, y: pointer.y };
-          this.initialDimensionPositions = this.dimensionElements.map(
-            (el) => ({
-              left: el.left as number,
-              top: el.top as number,
-            })
-          );
-        }
-        break;
-      case 'position': {
-        const textObject = this.dimensionElements.find(
-          (el) => el.type === 'i-text'
-        ) as fabric.IText;
-        if (textObject) {
-          textObject.set({
-            selectable: true,
-            evented: true,
-          });
-          canvas.setActiveObject(textObject);
-          textObject.enterEditing();
-        }
+          
+          // Sofortige Textbearbeitung aktivieren
+          const dimensionGroup = this.dimensionElements[0] as fabric.Group;
+          if (dimensionGroup && dimensionGroup.type === 'group') {
+            // Finde den Text innerhalb der Gruppe
+            const textObject = dimensionGroup.getObjects().find(
+              (obj: fabric.Object) => obj.type === 'i-text'
+            ) as fabric.IText;
+            
+            if (textObject) {
+              // Aktiviere die Gruppe und starte die Textbearbeitung
+              canvas.setActiveObject(dimensionGroup);
+              // Verzögerung, um sicherzustellen, dass die Gruppe aktiv ist
+              setTimeout(() => {
+                textObject.enterEditing();
+              }, 50);
+            }
+          }
 
-        this.clearTemporaryDimensionAnchors(canvas);
-        this.dimensionStep = null;
-        this.firstAnchorPoint = null;
-        this.dimensionElements = [];
-        this.dimensionDragStartPoint = null;
-        this.initialDimensionPositions = [];
-        console.log('Bemaßung platziert. Text kann nun bearbeitet werden.');
+          this.clearTemporaryDimensionAnchors(canvas);
+          this.dimensionStep = null;
+          this.firstAnchorPoint = null;
+          this.dimensionElements = [];
+          this.dimensionDragStartPoint = null;
+          this.initialDimensionPositions = [];
+          console.log('Bemaßung platziert. Text kann nun bearbeitet werden.');
+        }
         break;
-      }
     }
   }
 
   public handleDimensionMouseMove(canvas: fabric.Canvas, options: any): void {
-    if (this.dimensionStep === 'position' && this.dimensionDragStartPoint) {
-      const pointer = canvas.getPointer(options.e);
-      const offsetX = pointer.x - this.dimensionDragStartPoint.x;
-      const offsetY = pointer.y - this.dimensionDragStartPoint.y;
-
-      this.dimensionElements.forEach((el, index) => {
-        const initialPos = this.initialDimensionPositions[index];
-        el.set({
-          left: initialPos.left + offsetX,
-          top: initialPos.top + offsetY,
-        });
-        el.setCoords();
-      });
-    }
+    // Keine spezielle Mausbewegungslogik mehr für die Bemaßung benötigt
   }
 
   public prepareDimensionableAnchors(canvas: fabric.Canvas, editablePipes: any[], editableLines: any[] = []): void {
@@ -179,6 +161,8 @@ export class DimensionService {
         strokeWidth: 1,
         selectable: false,
         evented: false,
+        hasControls: false,
+        hasBorders: false,
       }
     );
 
@@ -189,6 +173,8 @@ export class DimensionService {
         strokeWidth: 1,
         selectable: false,
         evented: false,
+        hasControls: false,
+        hasBorders: false,
       }
     );
 
@@ -199,6 +185,8 @@ export class DimensionService {
         strokeWidth: 1,
         selectable: false,
         evented: false,
+        hasControls: false,
+        hasBorders: false,
       }
     );
 
@@ -208,21 +196,49 @@ export class DimensionService {
       fontSize: 12,
       originX: 'center',
       originY: 'center',
-      selectable: false,
-      evented: false,
+      selectable: true,
+      evented: true,
+      hasControls: false,
+      hasBorders: false,
     });
 
-    this.dimensionElements.push(
-      extensionLine1,
-      extensionLine2,
-      dimensionLine,
-      text
+    // Erstelle eine Gruppe aus allen Bemaßungselementen
+    const dimensionGroup = new fabric.Group(
+      [extensionLine1, extensionLine2, dimensionLine, text],
+      {
+        selectable: true,
+        evented: true,
+        hasControls: false,
+        hasBorders: true,
+        subTargetCheck: true, // Erlaubt die Auswahl von Unterelementen
+      }
     );
-    this.dimensionElements.forEach((obj) => canvas.add(obj));
+
+    this.dimensionElements.push(dimensionGroup);
+    canvas.add(dimensionGroup);
+    canvas.setActiveObject(dimensionGroup);
+    
+    // Mache die Gruppe interaktiv verschiebbar
+    dimensionGroup.set({
+      hasControls: true,
+      hasBorders: true,
+      lockScalingX: true,  // Verhindere Skalierung in X-Richtung
+      lockScalingY: true,  // Verhindere Skalierung in Y-Richtung
+      lockUniScaling: true // Verhindere gleichmäßige Skalierung
+    });
+    
+    // Füge Steuerungspunkte hinzu (wird später implementiert)
+    // this.addControlPointsToDimensionGroup(dimensionGroup, canvas);
+    
     canvas.requestRenderAll();
   }
 
   public getDimensionStep(): 'start' | 'end' | 'position' | null {
     return this.dimensionStep;
+  }
+
+  // Methode zum Hinzufügen von benutzerdefinierten Steuerungspunkten zur Bemaßungsgruppe
+  private addControlPointsToDimensionGroup(group: fabric.Group, canvas: fabric.Canvas): void {
+    // Diese Methode wird später implementiert, um interaktive Anpassung zu ermöglichen
   }
 }

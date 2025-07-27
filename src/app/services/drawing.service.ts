@@ -95,6 +95,24 @@ export class DrawingService {
 
   public handleDoubleClick(options: fabric.TEvent<MouseEvent>): void {
     this.lineDrawingService.handlePipeDoubleClick(this.canvas, options);
+    
+    // Prüfe, ob ein Bemaßungsobjekt doppelgeklickt wurde
+    const target = (options as any).target;
+    if (target) {
+      // Wenn das Ziel eine Gruppe ist (Bemaßung), aktiviere den Text zum Bearbeiten
+      if (target.type === 'group') {
+        const group = target as fabric.Group;
+        const textObject = group.getObjects().find(
+          (obj: fabric.Object) => obj.type === 'i-text'
+        ) as fabric.IText;
+        
+        if (textObject) {
+          // Aktiviere den Text zum Bearbeiten
+          textObject.enterEditing();
+          textObject.selectAll();
+        }
+      }
+    }
   }
 
   public handleSelectionCreated(e: any): void {
