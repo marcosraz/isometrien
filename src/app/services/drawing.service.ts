@@ -38,6 +38,21 @@ export class DrawingService {
     return this.objectManagementService.isEditingText(this.canvas);
   }
 
+  public isTextEditingInGroup(): boolean {
+    const activeObject = this.canvas?.getActiveObject();
+    if (activeObject && activeObject.type === 'group') {
+      const group = activeObject as fabric.Group;
+      let isEditing = false;
+      group.forEachObject((obj: fabric.Object) => {
+        if (obj.type === 'i-text' && (obj as fabric.IText).isEditing) {
+          isEditing = true;
+        }
+      });
+      return isEditing;
+    }
+    return false;
+  }
+
   public startDimensioning(): void {
     this.lineDrawingService.setDrawingMode('dimension');
     this.dimensionService.startDimensioning();
@@ -103,13 +118,15 @@ export class DrawingService {
       if (target.type === 'group') {
         const group = target as fabric.Group;
         const textObject = group.getObjects().find(
-          (obj: fabric.Object) => obj.type === 'i-text'
+          (obj: fabric.Object) => obj.type === 'i-text' || (obj as any).customType === 'dimensionText'
         ) as fabric.IText;
         
         if (textObject) {
           // Aktiviere den Text zum Bearbeiten
           textObject.enterEditing();
           textObject.selectAll();
+          // Make sure the group is active so the text editing is visible
+          this.canvas.setActiveObject(group);
         }
       }
     }

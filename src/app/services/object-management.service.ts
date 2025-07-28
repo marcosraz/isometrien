@@ -48,6 +48,28 @@ export class ObjectManagementService {
 
   public deleteSelectedObjects(canvas: fabric.Canvas): void {
     const activeObject = canvas.getActiveObject();
+    
+    // Check if text is being edited within the active object (group or direct text)
+    let isTextEditing = false;
+    if (activeObject) {
+      if ((activeObject as fabric.IText)?.isEditing) {
+        isTextEditing = true;
+      } else if (activeObject.type === 'group') {
+        // Check if any text object within the group is being edited
+        const group = activeObject as fabric.Group;
+        group.forEachObject((obj: fabric.Object) => {
+          if (obj.type === 'i-text' && (obj as fabric.IText).isEditing) {
+            isTextEditing = true;
+          }
+        });
+      }
+    }
+    
+    // Don't delete if text is being edited
+    if (isTextEditing) {
+      return;
+    }
+    
     if (activeObject) {
       if (activeObject.type === 'activeSelection') {
         (activeObject as fabric.ActiveSelection).forEachObject((obj) => {
@@ -62,7 +84,29 @@ export class ObjectManagementService {
 
   public isEditingText(canvas: fabric.Canvas): boolean {
     const activeObject = canvas.getActiveObject();
-    return activeObject instanceof fabric.IText && activeObject.isEditing;
+    
+    if (!activeObject) {
+      return false;
+    }
+    
+    // Check if direct text object is editing
+    if (activeObject instanceof fabric.IText && activeObject.isEditing) {
+      return true;
+    }
+    
+    // Check if text is being edited within a group
+    if (activeObject.type === 'group') {
+      const group = activeObject as fabric.Group;
+      let isEditing = false;
+      group.forEachObject((obj: fabric.Object) => {
+        if (obj.type === 'i-text' && (obj as fabric.IText).isEditing) {
+          isEditing = true;
+        }
+      });
+      return isEditing;
+    }
+    
+    return false;
   }
 
   public addIsometricLine(canvas: fabric.Canvas): void {

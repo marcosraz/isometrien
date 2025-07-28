@@ -32,12 +32,36 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
     private dimensionService: DimensionService
   ) {
     this._keyDownHandler = (event: KeyboardEvent) => {
+      const activeObject = this.canvas?.getActiveObject();
+
+      // Check if text is being edited (either directly or within a group)
+      let isTextEditing = false;
+      if (activeObject) {
+        if (activeObject.type === 'i-text' && (activeObject as fabric.IText).isEditing) {
+          isTextEditing = true;
+        } else if (activeObject.type === 'group') {
+          // Check if any text object within the group is being edited
+          const group = activeObject as fabric.Group;
+          group.forEachObject((obj: fabric.Object) => {
+            if (obj.type === 'i-text' && (obj as fabric.IText).isEditing) {
+              isTextEditing = true;
+            }
+          });
+        }
+      }
+
+      if (isTextEditing) {
+        if (event.key === 'Backspace' || event.key === 'Delete') {
+          // Prevent the event from bubbling up to the global handler
+          event.stopPropagation();
+        }
+        return;
+      }
+
       if (event.key === 'Escape') {
         this.drawingService.cancelDrawing();
       } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        if (!this.drawingService.isEditingText()) {
-          this.drawingService.deleteSelectedObjects();
-        }
+        this.drawingService.deleteSelectedObjects();
       }
     };
   }
@@ -71,6 +95,12 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
         this.drawingService.handleDoubleClick(
           options as fabric.TEvent<MouseEvent>
         );
+      });
+
+      this.canvas.on('text:editing:exited', ({ target }) => {
+        if (target && target.text?.trim() === '') {
+          this.canvas.remove(target);
+        }
       });
 
       this.canvas.on('selection:created', (e) =>

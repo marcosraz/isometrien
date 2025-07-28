@@ -48,24 +48,6 @@ export class DimensionService {
           );
           this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
           
-          // Sofortige Textbearbeitung aktivieren
-          const dimensionGroup = this.dimensionElements[0] as fabric.Group;
-          if (dimensionGroup && dimensionGroup.type === 'group') {
-            // Finde den Text innerhalb der Gruppe
-            const textObject = dimensionGroup.getObjects().find(
-              (obj: fabric.Object) => obj.type === 'i-text'
-            ) as fabric.IText;
-            
-            if (textObject) {
-              // Aktiviere die Gruppe und starte die Textbearbeitung
-              canvas.setActiveObject(dimensionGroup);
-              // Verzögerung, um sicherzustellen, dass die Gruppe aktiv ist
-              setTimeout(() => {
-                textObject.enterEditing();
-              }, 50);
-            }
-          }
-
           this.clearTemporaryDimensionAnchors(canvas);
           this.dimensionStep = null;
           this.firstAnchorPoint = null;
@@ -200,6 +182,7 @@ export class DimensionService {
       evented: true,
       hasControls: false,
       hasBorders: false,
+      customType: 'dimensionText', // Add custom type for identification
     });
 
     // Erstelle eine Gruppe aus allen Bemaßungselementen
