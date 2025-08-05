@@ -80,12 +80,16 @@ export class ToolbarComponent {
   
   public toggleWelding(): void {
     this.showWeldingTools = !this.showWeldingTools;
-    if (!this.showWeldingTools && this.drawingService.drawingMode === 'weldstamp') {
+    if (!this.showWeldingTools && (this.drawingService.drawingMode === 'weldstamp' || this.drawingService.drawingMode === 'welderstamp')) {
       this.drawingService.setDrawingMode('idle');
     }
   }
   
   public startWeldstamp(): void {
     this.drawingService.setDrawingMode('weldstamp');
+  }
+  
+  public startWelderStamp(): void {
+    this.drawingService.setDrawingMode('welderstamp');
   }
 }

@@ -76,13 +76,17 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp'
   ): void {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
+    } else if (mode === 'welderstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStamp();
     } else {
       this.weldingService.stopWeldstamp();
+      this.weldingService.stopWelderStamp();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -196,19 +200,24 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' {
-    if (this.weldingService.isActive()) {
-      return 'weldstamp';
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' {
+    const weldingMode = this.weldingService.getActiveMode();
+    if (weldingMode) {
+      return weldingMode;
     }
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
+    } else if (mode === 'welderstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStamp();
     } else {
       this.weldingService.stopWeldstamp();
+      this.weldingService.stopWelderStamp();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }

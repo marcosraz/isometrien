@@ -16,7 +16,9 @@ export interface WeldStamp {
 export class WeldingService {
   private canvas: fabric.Canvas | null = null;
   private isWeldstampActive: boolean = false;
+  private isWelderStampActive: boolean = false;
   private currentWeldNumber: number = 1;
+  private currentWelderNumber: number = 1;
   private weldStamps: WeldStamp[] = [];
   private tempLine: fabric.Line | null = null;
   private startPoint: { x: number; y: number } | null = null;
@@ -51,37 +53,88 @@ export class WeldingService {
     }
   }
 
-  public handleMouseDown(e: any): void {
-    if (!this.canvas || !this.isWeldstampActive) return;
+  public startWelderStamp(): void {
+    this.isWelderStampActive = true;
+    this.startPoint = null;
+    this.tempLine = null;
+  }
 
-    const pointer = this.canvas.getPointer(e.e);
-    let clickPoint = { x: pointer.x, y: pointer.y };
+  public stopWelderStamp(): void {
+    this.isWelderStampActive = false;
+    this.startPoint = null;
     
-    // Check if shift is held for anchor snapping
-    if (e.e.shiftKey) {
-      const nearestAnchor = this.findNearestAnchor(pointer);
-      if (nearestAnchor) {
-        clickPoint = nearestAnchor;
-      }
+    // Reset anchor highlight
+    if (this.highlightedAnchor && this.originalAnchorColor !== null) {
+      this.highlightedAnchor.set('fill', this.originalAnchorColor);
+      this.highlightedAnchor = null;
+      this.originalAnchorColor = null;
     }
     
-    if (!this.startPoint) {
-      // First click - start line at clicked position
-      this.startPoint = clickPoint;
-      this.createTempLine(this.startPoint, pointer);
-    } else {
-      // Second click - create weld stamp
-      this.createWeldStamp(this.startPoint, clickPoint);
-      this.startPoint = null;
-      if (this.tempLine) {
-        this.canvas.remove(this.tempLine);
-        this.tempLine = null;
+    if (this.tempLine && this.canvas) {
+      this.canvas.remove(this.tempLine);
+      this.tempLine = null;
+      this.canvas.renderAll();
+    }
+  }
+
+  public handleMouseDown(e: any): void {
+    if (!this.canvas) return;
+    
+    if (this.isWeldstampActive) {
+      const pointer = this.canvas.getPointer(e.e);
+      let clickPoint = { x: pointer.x, y: pointer.y };
+      
+      // Check if shift is held for anchor snapping
+      if (e.e.shiftKey) {
+        const nearestAnchor = this.findNearestAnchor(pointer);
+        if (nearestAnchor) {
+          clickPoint = nearestAnchor;
+        }
+      }
+      
+      if (!this.startPoint) {
+        // First click - start line at clicked position
+        this.startPoint = clickPoint;
+        this.createTempLine(this.startPoint, pointer);
+      } else {
+        // Second click - create weld stamp
+        this.createWeldStamp(this.startPoint, clickPoint);
+        this.startPoint = null;
+        if (this.tempLine) {
+          this.canvas.remove(this.tempLine);
+          this.tempLine = null;
+        }
+      }
+    } else if (this.isWelderStampActive) {
+      const pointer = this.canvas.getPointer(e.e);
+      let clickPoint = { x: pointer.x, y: pointer.y };
+      
+      // Check if shift is held for anchor snapping
+      if (e.e.shiftKey) {
+        const nearestAnchor = this.findNearestAnchor(pointer);
+        if (nearestAnchor) {
+          clickPoint = nearestAnchor;
+        }
+      }
+      
+      if (!this.startPoint) {
+        // First click - start line at clicked position
+        this.startPoint = clickPoint;
+        this.createTempLine(this.startPoint, pointer);
+      } else {
+        // Second click - create welder stamp
+        this.createWelderStamp(this.startPoint, clickPoint);
+        this.startPoint = null;
+        if (this.tempLine) {
+          this.canvas.remove(this.tempLine);
+          this.tempLine = null;
+        }
       }
     }
   }
 
   public handleMouseMove(e: any): void {
-    if (!this.canvas || !this.isWeldstampActive) return;
+    if (!this.canvas || (!this.isWeldstampActive && !this.isWelderStampActive)) return;
 
     const pointer = this.canvas.getPointer(e.e);
     let endPoint = { x: pointer.x, y: pointer.y };
@@ -250,6 +303,115 @@ export class WeldingService {
     this.currentWeldNumber++;
   }
 
+  private createWelderStamp(start: { x: number; y: number }, end: { x: number; y: number }): void {
+    if (!this.canvas) return;
+
+    // Create line
+    const line = new fabric.Line([start.x, start.y, end.x, end.y], {
+      stroke: 'black',
+      strokeWidth: 2,
+      selectable: false,
+      evented: false
+    });
+
+    // Create circle at end point
+    const circle = new fabric.Circle({
+      left: end.x,
+      top: end.y,
+      radius: 15,
+      fill: 'white',
+      stroke: 'black',
+      strokeWidth: 2,
+      selectable: false,
+      evented: false,
+      originX: 'center',
+      originY: 'center'
+    });
+
+    // Create horizontal line in circle (from edge to edge)
+    const horizontalLine = new fabric.Line([
+      end.x - 15, end.y, 
+      end.x + 15, end.y
+    ], {
+      stroke: 'black',
+      strokeWidth: 2,
+      selectable: false,
+      evented: false
+    });
+
+    // Create text with number above circle
+    const text = new fabric.Text(this.currentWelderNumber.toString(), {
+      left: end.x,
+      top: end.y - 25, // Position above circle
+      fontSize: 12, // Smaller font
+      fontFamily: 'Arial',
+      fill: 'black',
+      selectable: false,
+      evented: false,
+      originX: 'center',
+      originY: 'center',
+      textAlign: 'center'
+    });
+
+    // Group all elements
+    const group = new fabric.Group([line, circle, horizontalLine, text], {
+      selectable: true,
+      hasControls: false,
+      hasBorders: true,
+      lockScalingX: true,
+      lockScalingY: true,
+      lockRotation: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      subTargetCheck: true
+    });
+    
+    // Store custom data
+    // @ts-ignore
+    group.data = { 
+      type: 'welderstamp', 
+      number: this.currentWelderNumber,
+      startPoint: start,
+      endPoint: end,
+      lineObj: line,
+      circleObj: circle,
+      horizontalLineObj: horizontalLine,
+      textObj: text
+    };
+
+    // Store reference to text in group data for easy access
+    // @ts-ignore
+    group.data.textObject = text;
+
+    // Set up double-click handler for editing
+    group.on('mousedblclick', () => {
+      console.log('Welder stamp double-clicked');
+      this.editWelderNumber(group);
+    });
+
+    // Set up drag handler for moving end point
+    group.on('moving', (e: any) => {
+      this.handleWelderStampDrag(group, e);
+    });
+
+    this.canvas.add(group);
+    
+    // Deselect immediately to prevent accidental movement
+    this.canvas.discardActiveObject();
+
+    // Store weld stamp
+    this.weldStamps.push({
+      line,
+      circle,
+      text,
+      group,
+      number: this.currentWelderNumber,
+      anchorPoint: start
+    });
+
+    this.currentWelderNumber++;
+  }
+
   private findNearestAnchor(point: { x: number; y: number }): { x: number; y: number; object?: fabric.Circle } | null {
     if (!this.canvas) return null;
 
@@ -329,14 +491,71 @@ export class WeldingService {
     return;
   }
 
+  private editWelderNumber(group: fabric.Group): void {
+    if (!this.canvas) return;
+
+    // @ts-ignore
+    const currentNumber = group.data?.number || '1';
+    const input = prompt('Enter welder number:', currentNumber.toString());
+    
+    if (input && !isNaN(Number(input))) {
+      // Get objects from group
+      const objects = group.getObjects();
+      const text = objects.find((obj: any) => obj instanceof fabric.Text) as fabric.Text;
+      
+      if (text) {
+        // Save current position
+        const currentLeft = group.left;
+        const currentTop = group.top;
+        
+        // Update text
+        text.set('text', input);
+        
+        // @ts-ignore
+        group.data.number = Number(input);
+        
+        // Ensure group stays at same position
+        group.set({
+          left: currentLeft,
+          top: currentTop
+        });
+        
+        // Update the group
+        group.dirty = true;
+        group.setCoords();
+        
+        // Deselect the group to prevent accidental movement
+        this.canvas.discardActiveObject();
+        
+        this.canvas.renderAll();
+      }
+    }
+  }
+
+  private handleWelderStampDrag(group: fabric.Group, e: any): void {
+    // Dragging is disabled for now to avoid coordinate issues
+    // The group can be moved as a whole unit
+    return;
+  }
+
   public handleKeyDown(e: KeyboardEvent): void {
-    if (e.key === 'Escape' && this.isWeldstampActive) {
-      this.stopWeldstamp();
+    if (e.key === 'Escape') {
+      if (this.isWeldstampActive) {
+        this.stopWeldstamp();
+      } else if (this.isWelderStampActive) {
+        this.stopWelderStamp();
+      }
     }
   }
 
   public isActive(): boolean {
-    return this.isWeldstampActive;
+    return this.isWeldstampActive || this.isWelderStampActive;
+  }
+
+  public getActiveMode(): 'weldstamp' | 'welderstamp' | null {
+    if (this.isWeldstampActive) return 'weldstamp';
+    if (this.isWelderStampActive) return 'welderstamp';
+    return null;
   }
 
   public resetNumbering(): void {
