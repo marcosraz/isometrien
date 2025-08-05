@@ -1,9 +1,63 @@
-.canvas-controls {
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
+
+.toolbar-row {
   display: flex;
   justify-content: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.canvas-controls button.active {
-  background-color: #ccc;
+.welding-tools {
+  display: flex;
+  gap: 10px;
+  margin-left: 20px;
+}
+
+.btn {
+  transition: all 0.3s ease;
+}
+
+.btn.active {
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-primary.active {
+  background-color: #004085;
+  border-color: #004085;
+}
+
+.btn-secondary.active {
+  background-color: #383d41;
+  border-color: #383d41;
+}
+
+.btn-info.active {
+  background-color: #0c5460;
+  border-color: #0c5460;
+}
+
+.btn-warning.active {
+  background-color: #856404;
+  border-color: #856404;
+}
+
+.btn-success {
+  transition: all 0.3s ease;
+}
+
+.btn-success:not(.btn-outline-secondary) {
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-danger.active {
+  background-color: #721c24;
+  border-color: #721c24;
 }

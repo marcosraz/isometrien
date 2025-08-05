@@ -4,6 +4,7 @@ import { IsometryService } from './isometry.service';
 import { LineDrawingService } from './line-drawing.service';
 import { DimensionService } from './dimension.service';
 import { ObjectManagementService } from './object-management.service';
+import { WeldingService } from './welding.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -18,12 +19,14 @@ export class DrawingService {
     private isometryService: IsometryService,
     private lineDrawingService: LineDrawingService,
     private dimensionService: DimensionService,
-    private objectManagementService: ObjectManagementService
+    private objectManagementService: ObjectManagementService,
+    private weldingService: WeldingService
   ) {}
 
   public setCanvas(canvas: fabric.Canvas): void {
     this.canvas = canvas;
     this.lineDrawingService.setCanvas(canvas);
+    this.weldingService.setCanvas(canvas);
   }
 
   public requestRedraw(): void {
@@ -63,6 +66,9 @@ export class DrawingService {
     const editablePipes = this.lineDrawingService.getEditablePipes();
     const editableLines = this.lineDrawingService.getEditableLines();
     this.dimensionService.prepareDimensionableAnchors(this.canvas, editablePipes, editableLines);
+    
+    // Stelle sicher, dass alle Ankerpunkte sichtbar bleiben
+    this.dimensionService.ensureAnchorsAlwaysVisible(this.canvas);
   }
 
   public startTextMode(): void {
@@ -70,12 +76,23 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp'
   ): void {
-    this.lineDrawingService.setDrawingMode(mode);
+    if (mode === 'weldstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWeldstamp();
+    } else {
+      this.weldingService.stopWeldstamp();
+      this.lineDrawingService.setDrawingMode(mode);
+    }
   }
 
   public handleMouseDown(options: any): void {
+    if (this.weldingService.isActive()) {
+      this.weldingService.handleMouseDown(options);
+      return;
+    }
+
     const drawingMode = this.lineDrawingService.drawingMode;
 
     if (drawingMode === 'dimension') {
@@ -96,6 +113,11 @@ export class DrawingService {
   }
 
   public handleMouseMove(options: any): void {
+    if (this.weldingService.isActive()) {
+      this.weldingService.handleMouseMove(options);
+      return;
+    }
+
     const drawingMode = this.lineDrawingService.drawingMode;
 
     if (drawingMode === 'dimension') {
@@ -111,23 +133,16 @@ export class DrawingService {
   public handleDoubleClick(options: fabric.TEvent<MouseEvent>): void {
     this.lineDrawingService.handlePipeDoubleClick(this.canvas, options);
     
-    // Prüfe, ob ein Bemaßungsobjekt doppelgeklickt wurde
+    // Prüfe, ob ein Bemaßungstext doppelgeklickt wurde
     const target = (options as any).target;
     if (target) {
-      // Wenn das Ziel eine Gruppe ist (Bemaßung), aktiviere den Text zum Bearbeiten
-      if (target.type === 'group') {
-        const group = target as fabric.Group;
-        const textObject = group.getObjects().find(
-          (obj: fabric.Object) => obj.type === 'i-text' || (obj as any).customType === 'dimensionText'
-        ) as fabric.IText;
-        
-        if (textObject) {
-          // Aktiviere den Text zum Bearbeiten
-          textObject.enterEditing();
-          textObject.selectAll();
-          // Make sure the group is active so the text editing is visible
-          this.canvas.setActiveObject(group);
-        }
+      // Prüfe direkt auf Bemaßungstext
+      if (target.type === 'i-text' && (target as any).customType === 'dimensionText') {
+        const textObject = target as fabric.IText;
+        // Aktiviere den Text zum Bearbeiten
+        this.canvas.setActiveObject(textObject);
+        textObject.enterEditing();
+        textObject.selectAll();
       }
     }
   }
@@ -146,6 +161,7 @@ export class DrawingService {
 
   public cancelDrawing(): void {
     this.lineDrawingService.cancelDrawing(this.canvas);
+    // Diese Methode hält jetzt die Ankerpunkte sichtbar
     if (this.dimensionService.getDimensionStep()) {
       this.dimensionService.clearTemporaryDimensionAnchors(this.canvas);
     }
@@ -175,13 +191,26 @@ export class DrawingService {
     this.objectManagementService.addValve(this.canvas);
   }
 
+  public addAnchors(): void {
+    this.setDrawingMode('addAnchors');
+  }
+
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' {
+    if (this.weldingService.isActive()) {
+      return 'weldstamp';
+    }
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text') {
-    this.lineDrawingService.setDrawingMode(mode);
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp') {
+    if (mode === 'weldstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWeldstamp();
+    } else {
+      this.weldingService.stopWeldstamp();
+      this.lineDrawingService.setDrawingMode(mode);
+    }
   }
 
   // Getters for other properties to maintain compatibility

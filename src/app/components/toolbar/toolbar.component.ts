@@ -13,6 +13,9 @@ import { ObjectManagementService } from '../../services/object-management.servic
   styleUrls: ['./toolbar.component.scss'],
 })
 export class ToolbarComponent {
+  public snapToAngle: boolean = false;
+  public showWeldingTools: boolean = false;
+  
   constructor(
     public drawingService: DrawingService,
     private lineDrawingService: LineDrawingService,
@@ -55,7 +58,7 @@ export class ToolbarComponent {
   }
 
   public addAnchors(): void {
-    this.drawingService.requestRedraw();
+    this.drawingService.addAnchors();
   }
 
   public applyDimension(): void {
@@ -68,5 +71,21 @@ export class ToolbarComponent {
 
   public addText(): void {
     this.drawingService.startTextMode();
+  }
+  
+  public toggleSnapToAngle(): void {
+    this.snapToAngle = !this.snapToAngle;
+    this.lineDrawingService.setSnapToAngle(this.snapToAngle);
+  }
+  
+  public toggleWelding(): void {
+    this.showWeldingTools = !this.showWeldingTools;
+    if (!this.showWeldingTools && this.drawingService.drawingMode === 'weldstamp') {
+      this.drawingService.setDrawingMode('idle');
+    }
+  }
+  
+  public startWeldstamp(): void {
+    this.drawingService.setDrawingMode('weldstamp');
   }
 }

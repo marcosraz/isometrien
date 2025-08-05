@@ -71,12 +71,33 @@ export class ObjectManagementService {
     }
     
     if (activeObject) {
-      if (activeObject.type === 'activeSelection') {
+      // Prüfe ob es Teil einer Dimension ist
+      if ((activeObject as any).isDimensionPart && (activeObject as any).dimensionId) {
+        const dimensionId = (activeObject as any).dimensionId;
+        
+        // Finde alle Objekte mit dieser Dimension ID
+        const objectsToRemove = canvas.getObjects().filter(obj => 
+          (obj as any).dimensionId === dimensionId
+        );
+        
+        // Entferne alle gefundenen Objekte
+        objectsToRemove.forEach(obj => canvas.remove(obj));
+      } else if (activeObject.type === 'activeSelection') {
         (activeObject as fabric.ActiveSelection).forEachObject((obj) => {
-          canvas.remove(obj);
+          // Prüfe ob ein Objekt in der Auswahl Teil einer Dimension ist
+          if ((obj as any).isDimensionPart && (obj as any).dimensionId) {
+            const dimensionId = (obj as any).dimensionId;
+            const dimObjects = canvas.getObjects().filter(o => 
+              (o as any).dimensionId === dimensionId
+            );
+            dimObjects.forEach(o => canvas.remove(o));
+          } else {
+            canvas.remove(obj);
+          }
         });
+      } else {
+        canvas.remove(activeObject);
       }
-      canvas.remove(activeObject);
       canvas.discardActiveObject();
       canvas.requestRenderAll();
     }
