@@ -64,12 +64,19 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "liveReload": true,
+            "hmr": true,
+            "poll": 2000
+          },
           "configurations": {
             "production": {
               "buildTarget": "isometrics-app:build:production"
             },
             "development": {
-              "buildTarget": "isometrics-app:build:development"
+              "buildTarget": "isometrics-app:build:development",
+              "liveReload": true,
+              "hmr": true
             }
           },
           "defaultConfiguration": "development"
