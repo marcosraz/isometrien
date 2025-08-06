@@ -5,6 +5,7 @@ import { LineDrawingService } from './line-drawing.service';
 import { DimensionService } from './dimension.service';
 import { ObjectManagementService } from './object-management.service';
 import { WeldingService } from './welding.service';
+import { StateManagementService } from './state-management.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -20,8 +21,15 @@ export class DrawingService {
     private lineDrawingService: LineDrawingService,
     private dimensionService: DimensionService,
     private objectManagementService: ObjectManagementService,
-    private weldingService: WeldingService
-  ) {}
+    private weldingService: WeldingService,
+    private stateManagementService: StateManagementService
+  ) {
+    // Connect state management to services
+    this.lineDrawingService.setStateManagement(this.stateManagementService);
+    this.dimensionService.setStateManagement(this.stateManagementService);
+    this.weldingService.setStateManagement(this.stateManagementService);
+    this.objectManagementService.setStateManagement(this.stateManagementService);
+  }
 
   public setCanvas(canvas: fabric.Canvas): void {
     this.canvas = canvas;
@@ -76,17 +84,43 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool'
   ): void {
+    // Stop dimension mode if it was active and we're switching to a different mode
+    if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
+      this.dimensionService.resetAnchorHighlights(this.canvas);
+      this.dimensionService.stopDimensioning();
+    }
+    
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
     } else if (mode === 'welderstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWelderStamp();
+    } else if (mode === 'welderstampempty') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStampEmpty();
+    } else if (mode === 'welderstampas') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStampAS();
+    } else if (mode === 'weld') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWeld();
+    } else if (mode === 'fluidstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startFluidStamp();
+    } else if (mode === 'spool') {
+      this.lineDrawingService.setDrawingMode('spool');
+      this.objectManagementService.startSpoolMode();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
+      this.weldingService.stopWelderStampEmpty();
+      this.weldingService.stopWelderStampAS();
+      this.weldingService.stopWeld();
+      this.weldingService.stopFluidStamp();
+      this.objectManagementService.stopSpoolMode();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -109,6 +143,11 @@ export class DrawingService {
     if (drawingMode === 'text') {
       this.objectManagementService.addText(this.canvas, options);
       this.lineDrawingService.setDrawingMode('idle');
+      return;
+    }
+
+    if (drawingMode === 'spool') {
+      this.objectManagementService.addSpoolText(this.canvas, options);
       return;
     }
 
@@ -165,8 +204,10 @@ export class DrawingService {
 
   public cancelDrawing(): void {
     this.lineDrawingService.cancelDrawing(this.canvas);
-    // Diese Methode hält jetzt die Ankerpunkte sichtbar
+    // Stop dimension mode if active
     if (this.dimensionService.getDimensionStep()) {
+      this.dimensionService.resetAnchorHighlights(this.canvas);
+      this.dimensionService.stopDimensioning();
       this.dimensionService.clearTemporaryDimensionAnchors(this.canvas);
     }
   }
@@ -200,7 +241,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
@@ -208,16 +249,32 @@ export class DrawingService {
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
     } else if (mode === 'welderstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWelderStamp();
+    } else if (mode === 'welderstampempty') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStampEmpty();
+    } else if (mode === 'welderstampas') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWelderStampAS();
+    } else if (mode === 'weld') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startWeld();
+    } else if (mode === 'fluidstamp') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.weldingService.startFluidStamp();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
+      this.weldingService.stopWelderStampEmpty();
+      this.weldingService.stopWelderStampAS();
+      this.weldingService.stopWeld();
+      this.weldingService.stopFluidStamp();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }

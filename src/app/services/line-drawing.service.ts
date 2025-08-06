@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { IsometryService } from './isometry.service';
+import { StateManagementService } from './state-management.service';
 
 export interface EditablePipe {
   segments: (fabric.Line | fabric.Path)[];
@@ -17,7 +18,7 @@ export interface EditableLine {
   providedIn: 'root',
 })
 export class LineDrawingService {
-  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' = 'idle';
+  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' = 'idle';
   public lineStartPoint: { x: number; y: number } | null = null;
   public pipePoints: { x: number; y: number }[] = [];
   private previewLine: fabric.Line | null = null;
@@ -30,7 +31,11 @@ export class LineDrawingService {
   private isCtrlPressed: boolean = false;
   private currentlyEditingPipe: EditablePipe | null = null;
   private anchorPreview: fabric.Circle | null = null;
+  private highlightedAnchor: fabric.Object | null = null;
+  private originalAnchorColor: string | null = null;
 
+  private stateManagement: StateManagementService | null = null;
+  
   constructor(private isometryService: IsometryService) {
     // Lausche auf Tasten
     document.addEventListener('keydown', (e) => {
@@ -55,7 +60,7 @@ export class LineDrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool'
   ): void {
     if (this.drawingMode === 'addPipe' && mode !== 'addPipe') {
       // Aufräumen beim Verlassen des Pipe-Modus
@@ -69,6 +74,84 @@ export class LineDrawingService {
       }
     }
     this.drawingMode = mode;
+  }
+
+  private resetAnchorHighlight(): void {
+    if (this.highlightedAnchor && this.originalAnchorColor !== null) {
+      // Check if it's a weld point (group) or regular anchor
+      if (this.highlightedAnchor.type === 'group' && (this.highlightedAnchor as any).isWeldPoint) {
+        // For weld points, change the line colors back
+        const objects = (this.highlightedAnchor as fabric.Group).getObjects();
+        objects.forEach((obj: any) => {
+          if (obj.type === 'line') {
+            obj.set('stroke', 'red');
+          }
+        });
+      } else {
+        // Regular anchor point
+        this.highlightedAnchor.set('fill', this.originalAnchorColor);
+      }
+      this.highlightedAnchor = null;
+      this.originalAnchorColor = null;
+    }
+  }
+
+  private highlightAnchor(anchor: fabric.Object): void {
+    if (this.highlightedAnchor !== anchor) {
+      this.resetAnchorHighlight();
+      this.highlightedAnchor = anchor;
+      
+      // Check if it's a weld point (group) or regular anchor
+      if (anchor.type === 'group' && (anchor as any).isWeldPoint) {
+        // For weld points, change the line colors to green
+        this.originalAnchorColor = 'red'; // Store original color
+        const objects = (anchor as fabric.Group).getObjects();
+        objects.forEach((obj: any) => {
+          if (obj.type === 'line') {
+            obj.set('stroke', 'green');
+          }
+        });
+      } else {
+        // Regular anchor point
+        this.originalAnchorColor = anchor.get('fill') as string;
+        anchor.set('fill', 'green');
+      }
+      // Force canvas to re-render
+      if (this.canvas) {
+        this.canvas.requestRenderAll();
+      }
+    }
+  }
+
+  private findNearestAnchor(point: { x: number; y: number }, canvas: fabric.Canvas): { x: number; y: number; object?: fabric.Object } | null {
+    let nearestAnchor: { x: number; y: number; object?: fabric.Object } | null = null;
+    let minDistance = 30; // Maximum distance to snap to anchor
+
+    canvas.getObjects().forEach((obj: any) => {
+      // Check for anchor points and weld points (groups with customType)
+      if ((obj.type === 'circle' && obj.customType === 'anchorPoint') || 
+          (obj.type === 'group' && obj.customType === 'anchorPoint')) {
+        // Since originX and originY are 'center', left and top already represent the center
+        const centerX = obj.left!;
+        const centerY = obj.top!;
+        
+        const distance = Math.sqrt(
+          Math.pow(centerX - point.x, 2) + 
+          Math.pow(centerY - point.y, 2)
+        );
+        
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestAnchor = { 
+            x: centerX, 
+            y: centerY,
+            object: obj
+          };
+        }
+      }
+    });
+
+    return nearestAnchor;
   }
 
   private snapToAngle(start: { x: number; y: number }, end: { x: number; y: number }): { x: number; y: number } {
@@ -124,7 +207,17 @@ export class LineDrawingService {
 
     if (this.drawingMode === 'addLine') {
       if (!this.lineStartPoint) {
-        this.lineStartPoint = { x: pointer.x, y: pointer.y };
+        let startPoint = { x: pointer.x, y: pointer.y };
+        
+        // Check for anchor snapping when Ctrl is pressed
+        if (this.isCtrlPressed) {
+          const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+          if (nearestAnchor) {
+            startPoint = nearestAnchor;
+          }
+        }
+        
+        this.lineStartPoint = startPoint;
       } else {
         if (this.previewLine) {
           canvas.remove(this.previewLine);
@@ -132,7 +225,17 @@ export class LineDrawingService {
         }
         
         let endPoint = { x: pointer.x, y: pointer.y };
-        if (this.isShiftPressed || this.snapEnabled) {
+        
+        // Check for anchor snapping with Ctrl key
+        if (this.isCtrlPressed) {
+          const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+          if (nearestAnchor) {
+            endPoint = nearestAnchor;
+          }
+        }
+        
+        // Apply angle snapping if enabled (Shift key or toggle)
+        if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
           endPoint = this.snapToAngle(this.lineStartPoint, endPoint);
         }
         
@@ -150,42 +253,85 @@ export class LineDrawingService {
             evented: false,
           }
         );
-        canvas.add(line);
+        // Wrap line creation in state management
+        if (this.stateManagement) {
+          this.stateManagement.executeOperation('Draw Line', () => {
+            canvas.add(line);
 
-        const startCircle = new fabric.Circle({
-          radius: 5,
-          fill: 'red',
-          left: line.x1,
-          top: line.y1,
-          originX: 'center',
-          originY: 'center',
-          selectable: true,
-          evented: true,
-          customType: 'anchorPoint',
-          visible: true,
-        });
+            const startCircle = new fabric.Circle({
+              radius: 5,
+              fill: 'red',
+              left: line.x1,
+              top: line.y1,
+              originX: 'center',
+              originY: 'center',
+              selectable: true,
+              evented: true,
+              customType: 'anchorPoint',
+              visible: true,
+            });
 
-        const endCircle = new fabric.Circle({
-          radius: 5,
-          fill: 'red',
-          left: line.x2,
-          top: line.y2,
-          originX: 'center',
-          originY: 'center',
-          selectable: true,
-          evented: true,
-          customType: 'anchorPoint',
-          visible: true,
-        });
+            const endCircle = new fabric.Circle({
+              radius: 5,
+              fill: 'red',
+              left: line.x2,
+              top: line.y2,
+              originX: 'center',
+              originY: 'center',
+              selectable: true,
+              evented: true,
+              customType: 'anchorPoint',
+              visible: true,
+            });
 
-        canvas.add(startCircle, endCircle);
+            canvas.add(startCircle, endCircle);
 
-        // Speichere die Linie und ihre Ankerpunkte
-        const newEditableLine: EditableLine = {
-          line: line,
-          anchors: [startCircle, endCircle],
-        };
-        this.editableLines.push(newEditableLine);
+            // Speichere die Linie und ihre Ankerpunkte
+            const newEditableLine: EditableLine = {
+              line: line,
+              anchors: [startCircle, endCircle],
+            };
+            this.editableLines.push(newEditableLine);
+          });
+        } else {
+          // Fallback if state management not available
+          canvas.add(line);
+
+          const startCircle = new fabric.Circle({
+            radius: 5,
+            fill: 'red',
+            left: line.x1,
+            top: line.y1,
+            originX: 'center',
+            originY: 'center',
+            selectable: true,
+            evented: true,
+            customType: 'anchorPoint',
+            visible: true,
+          });
+
+          const endCircle = new fabric.Circle({
+            radius: 5,
+            fill: 'red',
+            left: line.x2,
+            top: line.y2,
+            originX: 'center',
+            originY: 'center',
+            selectable: true,
+            evented: true,
+            customType: 'anchorPoint',
+            visible: true,
+          });
+
+          canvas.add(startCircle, endCircle);
+
+          // Speichere die Linie und ihre Ankerpunkte
+          const newEditableLine: EditableLine = {
+            line: line,
+            anchors: [startCircle, endCircle],
+          };
+          this.editableLines.push(newEditableLine);
+        }
 
         this.lineStartPoint = null;
         this.drawingMode = 'idle';
@@ -199,8 +345,16 @@ export class LineDrawingService {
     if (this.drawingMode === 'addPipe') {
       let clickPoint = { x: pointer.x, y: pointer.y };
       
-      // Beim Snap auf Winkel anpassen
-      if ((this.isShiftPressed || this.snapEnabled) && this.pipePoints.length > 0) {
+      // Check for anchor snapping with Ctrl key
+      if (this.isCtrlPressed) {
+        const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+        if (nearestAnchor) {
+          clickPoint = nearestAnchor;
+        }
+      }
+      
+      // Apply angle snapping if enabled (Shift key or toggle)
+      if ((this.isShiftPressed || this.snapEnabled) && this.pipePoints.length > 0 && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         const lastPoint = this.pipePoints[this.pipePoints.length - 1];
         clickPoint = this.snapToAngle(lastPoint, clickPoint);
       }
@@ -414,21 +568,39 @@ export class LineDrawingService {
     
     if (this.drawingMode === 'addLine') {
       if (!this.lineStartPoint) return;
+      
+      // Reset previous anchor highlight
+      this.resetAnchorHighlight();
+      
       if (this.previewLine) {
         canvas.remove(this.previewLine);
       }
       
       let endPoint = { x: pointer.x, y: pointer.y };
-      if (this.isShiftPressed || this.snapEnabled) {
+      let strokeColor = 'black';
+      
+      // Check for anchor snapping with Ctrl key
+      if (this.isCtrlPressed) {
+        const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+        if (nearestAnchor) {
+          endPoint = nearestAnchor;
+          strokeColor = 'green';
+          // Highlight the anchor
+          this.highlightAnchor(nearestAnchor.object!);
+        }
+      }
+      
+      // Apply angle snapping if enabled (Shift key or toggle)
+      if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         endPoint = this.snapToAngle(this.lineStartPoint, endPoint);
       }
       
       this.previewLine = new fabric.Line(
         [this.lineStartPoint.x, this.lineStartPoint.y, endPoint.x, endPoint.y],
         {
-          stroke: 'rgba(0,0,0,0.3)',
+          stroke: strokeColor === 'green' ? 'green' : 'rgba(0,0,0,0.3)',
           strokeDashArray: [5, 5],
-          strokeWidth: 2,
+          strokeWidth: strokeColor === 'green' ? 3 : 2,
           selectable: false,
           evented: false,
         }
@@ -442,23 +614,39 @@ export class LineDrawingService {
     if (this.drawingMode === 'addPipe') {
       if (this.pipePoints.length === 0) return;
 
+      // Reset previous anchor highlight
+      this.resetAnchorHighlight();
+
       if (this.previewPipe) {
         canvas.remove(this.previewPipe);
       }
 
       const lastPoint = this.pipePoints[this.pipePoints.length - 1];
       let endPoint = { x: pointer.x, y: pointer.y };
+      let strokeColor = 'rgba(0,128,0,0.5)';
       
-      if (this.isShiftPressed || this.snapEnabled) {
+      // Check for anchor snapping with Ctrl key
+      if (this.isCtrlPressed) {
+        const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+        if (nearestAnchor) {
+          endPoint = nearestAnchor;
+          strokeColor = 'green';
+          // Highlight the anchor
+          this.highlightAnchor(nearestAnchor.object!);
+        }
+      }
+      
+      // Apply angle snapping if enabled (Shift key or toggle)
+      if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         endPoint = this.snapToAngle(lastPoint, endPoint);
       }
       
       this.previewPipe = new fabric.Line(
         [lastPoint.x, lastPoint.y, endPoint.x, endPoint.y],
         {
-          stroke: 'rgba(0,128,0,0.5)',
+          stroke: strokeColor,
           strokeDashArray: [5, 5],
-          strokeWidth: 5,
+          strokeWidth: strokeColor === 'green' ? 6 : 5,
           selectable: false,
           evented: false,
         }
@@ -469,37 +657,8 @@ export class LineDrawingService {
 
   public handlePipeDoubleClick(canvas: fabric.Canvas, options: fabric.TEvent<MouseEvent>): void {
     if (this.drawingMode === 'addPipe' && this.pipeSegments.length > 0) {
-      // Erstelle das EditablePipe Objekt
-      const newEditablePipe: EditablePipe = {
-        segments: this.pipeSegments,
-        anchors: this.pipeAnchors,
-        mainPoints: [...this.pipePoints], // Kopiere die Hauptpunkte
-      };
-      this.editablePipes.push(newEditablePipe);
-
-      // Setze die Segmente als verschiebbar
-      this.pipeSegments.forEach(segment => {
-        segment.set({
-          selectable: true,
-          evented: true,
-        });
-      });
-      
-      // Aktiviere die Bearbeitungsfunktion für diese Pipe
-      this.currentlyEditingPipe = newEditablePipe;
-
-      // Reset für nächste Pipe
-      this.pipeSegments = [];
-      this.pipeAnchors = [];
-      this.pipePoints = [];
-      this.drawingMode = 'idle';
-      
-      if (this.previewPipe) {
-        canvas.remove(this.previewPipe);
-        this.previewPipe = null;
-      }
-      
-      canvas.requestRenderAll();
+      // Use finishPipe which already has state management
+      this.finishPipe();
     }
   }
 
@@ -850,6 +1009,9 @@ export class LineDrawingService {
       this.anchorPreview = null;
     }
     
+    // Reset any anchor highlighting
+    this.resetAnchorHighlight();
+    
     this.cancelPipeDrawing(canvas);
     
     this.drawingMode = 'idle';
@@ -864,11 +1026,15 @@ export class LineDrawingService {
     return this.editableLines;
   }
 
+  private canvas!: fabric.Canvas;
+  
   public setCanvas(canvas: fabric.Canvas): void {
     this.canvas = canvas;
   }
-
-  private canvas!: fabric.Canvas;
+  
+  public setStateManagement(stateManagement: StateManagementService): void {
+    this.stateManagement = stateManagement;
+  }
   private snapEnabled: boolean = false;
   
   public setSnapToAngle(enabled: boolean): void {
@@ -877,21 +1043,47 @@ export class LineDrawingService {
   
   private finishPipe(): void {
     if (this.canvas && this.pipeSegments.length > 0) {
-      // Wie bei Doppelklick - beende die Pipe
-      const newEditablePipe: EditablePipe = {
-        segments: this.pipeSegments,
-        anchors: this.pipeAnchors,
-        mainPoints: [...this.pipePoints],
-      };
-      this.editablePipes.push(newEditablePipe);
+      // Wrap pipe completion in state management
+      if (this.stateManagement) {
+        this.stateManagement.executeOperation('Draw Pipe', () => {
+          // Wie bei Doppelklick - beende die Pipe
+          const newEditablePipe: EditablePipe = {
+            segments: this.pipeSegments,
+            anchors: this.pipeAnchors,
+            mainPoints: [...this.pipePoints],
+          };
+          this.editablePipes.push(newEditablePipe);
 
-      // Setze die Segmente als verschiebbar
-      this.pipeSegments.forEach(segment => {
-        segment.set({
-          selectable: true,
-          evented: true,
+          // Setze die Segmente als verschiebbar
+          this.pipeSegments.forEach(segment => {
+            segment.set({
+              selectable: true,
+              evented: true,
+            });
+          });
+          
+          // Clean up preview if exists
+          if (this.previewPipe) {
+            this.canvas!.remove(this.previewPipe);
+          }
         });
-      });
+      } else {
+        // Fallback if state management not available
+        const newEditablePipe: EditablePipe = {
+          segments: this.pipeSegments,
+          anchors: this.pipeAnchors,
+          mainPoints: [...this.pipePoints],
+        };
+        this.editablePipes.push(newEditablePipe);
+
+        // Setze die Segmente als verschiebbar
+        this.pipeSegments.forEach(segment => {
+          segment.set({
+            selectable: true,
+            evented: true,
+          });
+        });
+      }
       
       // Reset
       this.pipeSegments = [];

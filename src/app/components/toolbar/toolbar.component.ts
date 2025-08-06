@@ -80,7 +80,12 @@ export class ToolbarComponent {
   
   public toggleWelding(): void {
     this.showWeldingTools = !this.showWeldingTools;
-    if (!this.showWeldingTools && (this.drawingService.drawingMode === 'weldstamp' || this.drawingService.drawingMode === 'welderstamp')) {
+    if (!this.showWeldingTools && (this.drawingService.drawingMode === 'weldstamp' || 
+        this.drawingService.drawingMode === 'welderstamp' || 
+        this.drawingService.drawingMode === 'welderstampempty' ||
+        this.drawingService.drawingMode === 'welderstampas' ||
+        this.drawingService.drawingMode === 'weld' ||
+        this.drawingService.drawingMode === 'fluidstamp')) {
       this.drawingService.setDrawingMode('idle');
     }
   }
@@ -91,5 +96,25 @@ export class ToolbarComponent {
   
   public startWelderStamp(): void {
     this.drawingService.setDrawingMode('welderstamp');
+  }
+  
+  public startWelderStampEmpty(): void {
+    this.drawingService.setDrawingMode('welderstampempty');
+  }
+  
+  public startWelderStampAS(): void {
+    this.drawingService.setDrawingMode('welderstampas');
+  }
+  
+  public startWeld(): void {
+    this.drawingService.setDrawingMode('weld');
+  }
+  
+  public startFluidStamp(): void {
+    this.drawingService.setDrawingMode('fluidstamp');
+  }
+
+  public startSpool(): void {
+    this.drawingService.setDrawingMode('spool');
   }
 }

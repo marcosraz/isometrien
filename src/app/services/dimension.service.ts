@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { BehaviorSubject } from 'rxjs';
+import { StateManagementService } from './state-management.service';
 
 interface DimensionData {
   startAnchor: fabric.Object;
@@ -20,17 +21,51 @@ interface DimensionData {
 export class DimensionService {
   private dimensionStep: 'start' | 'end' | 'position' | null = null;
   private firstAnchorPoint: fabric.Object | null = null;
+  private hoveredAnchor: fabric.Object | null = null;
   private dimensionElements: fabric.Object[] = [];
   private dimensionDragStartPoint: { x: number; y: number } | null = null;
   private initialDimensionPositions: Array<{ left: number; top: number }> = [];
   private tempDimensionableAnchors: fabric.Circle[] = [];
   private dimensions: DimensionData[] = [];
+  private stateManagement: StateManagementService | null = null;
 
   constructor() {}
+  
+  public setStateManagement(stateManagement: StateManagementService): void {
+    this.stateManagement = stateManagement;
+  }
 
   public startDimensioning(): void {
     this.dimensionStep = 'start';
     console.log('Bemaßungsmodus gestartet. Bitte ersten Punkt wählen.');
+  }
+  
+  public stopDimensioning(): void {
+    this.dimensionStep = null;
+    this.firstAnchorPoint = null;
+    this.dimensionElements = [];
+    this.dimensionDragStartPoint = null;
+    this.initialDimensionPositions = [];
+    console.log('Bemaßungsmodus beendet.');
+  }
+  
+  public resetAnchorHighlights(canvas: fabric.Canvas): void {
+    // Alle Ankerpunkte zurücksetzen
+    canvas.getObjects().forEach((obj) => {
+      if (obj.type === 'circle' && (obj as any).customType === 'anchorPoint') {
+        const anchor = obj as fabric.Circle;
+        if (anchor.fill === 'green' || anchor.fill === 'orange') {
+          anchor.set({
+            fill: (anchor as any).originalFill || 'red',
+            radius: 5,
+            strokeWidth: 1,
+            stroke: 'black'
+          });
+        }
+      }
+    });
+    this.hoveredAnchor = null;
+    canvas.renderAll();
   }
   
   public getDimensionStep(): 'start' | 'end' | 'position' | null {
@@ -132,18 +167,30 @@ export class DimensionService {
           console.log(
             'Zweiter Punkt ausgewählt. Bemaßung wird erstellt und fixiert.'
           );
-          this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
+          // Wrap dimension creation in state management
+          if (this.stateManagement) {
+            this.stateManagement.executeOperation('Add Dimension', () => {
+              this.createDimensionVisuals(canvas, this.firstAnchorPoint!, secondAnchorPoint);
+            });
+          } else {
+            this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
+          }
           
           // Ankerpunkte bleiben sichtbar und benutzbar
           // this.clearTemporaryDimensionAnchors(canvas); // Auskommentiert
           
           // Reset für nächste Bemaßung aber bleibe im Dimension-Modus
-          this.dimensionStep = 'start'; // Zurück zum Start statt null
           this.firstAnchorPoint = null;
           this.dimensionElements = [];
           this.dimensionDragStartPoint = null;
           this.initialDimensionPositions = [];
           console.log('Bemaßung platziert. Bereit für nächste Bemaßung.');
+          
+          // Ankerpunkte zurücksetzen
+          this.resetAnchorHighlights(canvas);
+          
+          // Sofort zurück zum Start für neue Bemaßung
+          this.dimensionStep = 'start';
           
           // Stelle sicher, dass alle Ankerpunkte sichtbar bleiben
           this.ensureAnchorsAlwaysVisible(canvas);
@@ -159,7 +206,69 @@ export class DimensionService {
   }
 
   public handleDimensionMouseMove(canvas: fabric.Canvas, options: any): void {
-    // Keine spezielle Mausbewegungslogik mehr für die Bemaßung benötigt
+    // Hover-Effekt für Ankerpunkte
+    if (this.dimensionStep === 'start' || this.dimensionStep === 'end') {
+      const pointer = canvas.getPointer(options.e);
+      let foundAnchor: fabric.Object | null = null;
+      
+      // Durchsuche alle Ankerpunkte
+      canvas.getObjects().forEach((obj) => {
+        if (obj.type === 'circle' && (obj as any).customType === 'anchorPoint') {
+          const anchor = obj as fabric.Circle;
+          const distance = Math.sqrt(
+            Math.pow(pointer.x - anchor.left!, 2) + 
+            Math.pow(pointer.y - anchor.top!, 2)
+          );
+          
+          // Wenn Maus nahe am Ankerpunkt ist (20 Pixel Toleranz)
+          if (distance < 20 && anchor !== this.firstAnchorPoint) {
+            foundAnchor = anchor;
+          }
+        }
+      });
+      
+      // Vorherigen Hover entfernen (außer es ist der erste ausgewählte Punkt)
+      if (this.hoveredAnchor && this.hoveredAnchor !== foundAnchor && this.hoveredAnchor !== this.firstAnchorPoint) {
+        const prev = this.hoveredAnchor as fabric.Circle;
+        prev.set({
+          fill: (prev as any).originalFill || 'red',
+          radius: 5,
+          strokeWidth: 1,
+          stroke: 'black'
+        });
+      }
+      
+      // Neuen Hover setzen
+      if (foundAnchor && foundAnchor !== this.hoveredAnchor) {
+        const anchor = foundAnchor as fabric.Circle;
+        if (anchor.fill !== 'green' && anchor.fill !== 'orange') {
+          (anchor as any).originalFill = anchor.fill;
+          anchor.set({
+            fill: 'green',
+            radius: 7,
+            strokeWidth: 3,
+            stroke: 'darkgreen'
+          });
+        }
+      }
+      
+      this.hoveredAnchor = foundAnchor;
+      
+      // Ersten ausgewählten Punkt orange hervorheben
+      if (this.firstAnchorPoint && this.dimensionStep === 'end') {
+        const first = this.firstAnchorPoint as fabric.Circle;
+        if (first.fill !== 'orange') {
+          first.set({
+            fill: 'orange',
+            radius: 7,
+            strokeWidth: 3,
+            stroke: 'darkorange'
+          });
+        }
+      }
+      
+      canvas.renderAll();
+    }
   }
 
   public prepareDimensionableAnchors(canvas: fabric.Canvas, editablePipes: any[], editableLines: any[] = []): void {
@@ -1085,7 +1194,14 @@ export class DimensionService {
     // Wenn beide Ankerpunkte gefunden wurden, erstelle die Bemaßung
     if (startAnchor && endAnchor) {
       console.log('Erstelle Bemaßung für Linie zwischen zwei Ankerpunkten');
-      this.createDimensionVisuals(canvas, startAnchor, endAnchor);
+      // Wrap dimension creation in state management
+      if (this.stateManagement) {
+        this.stateManagement.executeOperation('Add Dimension', () => {
+          this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
+        });
+      } else {
+        this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
+      }
       // Bleibe im Dimension-Modus für weitere Bemaßungen
       this.dimensionStep = 'start';
       this.firstAnchorPoint = null;

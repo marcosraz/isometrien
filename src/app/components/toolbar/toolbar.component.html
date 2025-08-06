@@ -41,6 +41,21 @@
       <button (click)="startWelderStamp()" 
               class="btn btn-outline-danger"
               [class.active]="drawingService.drawingMode === 'welderstamp'">Welder Stamp</button>
+      <button (click)="startWelderStampEmpty()" 
+              class="btn btn-outline-danger"
+              [class.active]="drawingService.drawingMode === 'welderstampempty'">Welder Stamp empty</button>
+      <button (click)="startWelderStampAS()" 
+              class="btn btn-outline-danger"
+              [class.active]="drawingService.drawingMode === 'welderstampas'">Welder Stamp AS</button>
+      <button (click)="startWeld()" 
+              class="btn btn-outline-danger"
+              [class.active]="drawingService.drawingMode === 'weld'">Weld</button>
+      <button (click)="startFluidStamp()" 
+              class="btn btn-outline-danger"
+              [class.active]="drawingService.drawingMode === 'fluidstamp'">Flange Stamp</button>
+      <button (click)="startSpool()" 
+              class="btn btn-outline-danger"
+              [class.active]="drawingService.drawingMode === 'spool'">Spool</button>
     </div>
   </div>
 </div>

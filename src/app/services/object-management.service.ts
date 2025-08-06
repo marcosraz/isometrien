@@ -1,11 +1,60 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
+import { StateManagementService } from './state-management.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class ObjectManagementService {
+  private stateManagement: StateManagementService | null = null;
+  private spoolMode: boolean = false;
+  private spoolCounter: number = 1;
+  
   constructor() {}
+  
+  public setStateManagement(stateManagement: StateManagementService): void {
+    this.stateManagement = stateManagement;
+  }
+
+  public startSpoolMode(): void {
+    this.spoolMode = true;
+  }
+
+  public stopSpoolMode(): void {
+    this.spoolMode = false;
+  }
+
+  public isSpoolMode(): boolean {
+    return this.spoolMode;
+  }
+
+  public addSpoolText(canvas: fabric.Canvas, options: any): void {
+    const pointer = canvas.getPointer(options.e);
+    const text = new fabric.IText(`Spool ${this.spoolCounter}`, {
+      left: pointer.x,
+      top: pointer.y,
+      fontSize: 20,
+      fill: 'black',
+    });
+    
+    if (this.stateManagement) {
+      this.stateManagement.executeOperation('Add Spool Text', () => {
+        canvas.add(text);
+        canvas.setActiveObject(text);
+        text.enterEditing();
+        text.selectAll();
+        canvas.requestRenderAll();
+      });
+    } else {
+      canvas.add(text);
+      canvas.setActiveObject(text);
+      text.enterEditing();
+      text.selectAll();
+      canvas.requestRenderAll();
+    }
+    
+    this.spoolCounter++;
+  }
 
   public addText(canvas: fabric.Canvas, options: any): void {
     const pointer = canvas.getPointer(options.e);
