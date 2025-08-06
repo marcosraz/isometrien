@@ -371,9 +371,9 @@ export class WeldingService {
       const pointer = this.canvas.getPointer(e.e);
       let clickPoint = { x: pointer.x, y: pointer.y };
       
-      // Check if shift is held for line or anchor snapping
+      // Check if shift is held for line snapping ONLY (not anchor points)
       if (e.e.shiftKey) {
-        const nearest = this.findNearestLineOrAnchor(pointer);
+        const nearest = this.findNearestLine(pointer);
         if (nearest) {
           clickPoint = { x: nearest.x, y: nearest.y };
         }
@@ -450,9 +450,9 @@ export class WeldingService {
         }
       });
       
-      // Check for nearby lines or anchors when shift is held
+      // Check for nearby lines ONLY when shift is held (not anchor points)
       if (e.e.shiftKey) {
-        const nearest = this.findNearestLineOrAnchor(pointer);
+        const nearest = this.findNearestLine(pointer);
         if (nearest) {
           // Create preview at snap point
           const size = 8;
@@ -1119,6 +1119,30 @@ export class WeldingService {
     const distance = Math.sqrt((point.x - closestX) ** 2 + (point.y - closestY) ** 2);
     
     return { x: closestX, y: closestY, distance };
+  }
+
+  private findNearestLine(point: { x: number; y: number }): { x: number; y: number; object?: fabric.Object } | null {
+    if (!this.canvas) return null;
+
+    let nearestPoint: { x: number; y: number; object?: fabric.Object } | null = null;
+    let minDistance = 30; // Maximum distance to snap
+
+    // Only check for lines for weld tool
+    this.canvas.getObjects().forEach((obj: any) => {
+      if (obj.type === 'line' && obj.visible && !obj.isBackground) {
+        const linePoint = this.findNearestPointOnLine(obj, point);
+        if (linePoint.distance < minDistance) {
+          minDistance = linePoint.distance;
+          nearestPoint = {
+            x: linePoint.x,
+            y: linePoint.y,
+            object: obj
+          };
+        }
+      }
+    });
+
+    return nearestPoint;
   }
 
   private findNearestLineOrAnchor(point: { x: number; y: number }): { x: number; y: number; object?: fabric.Object; isLine?: boolean } | null {

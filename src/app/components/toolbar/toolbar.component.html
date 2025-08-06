@@ -18,9 +18,6 @@
             [class.btn-outline-secondary]="!snapToAngle">
       30° Snap {{ snapToAngle ? 'ON' : 'OFF' }}
     </button>
-    <button (click)="addIsometricLine()" class="btn btn-success">Iso Line</button>
-    <button (click)="addArc()" class="btn btn-success">Add Arc</button>
-    <button (click)="addValve()" class="btn btn-success">Add Valve</button>
     <button (click)="groupSelectedObjects()" class="btn btn-dark">Group</button>
     <button (click)="ungroupObjects()" class="btn btn-dark">Ungroup</button>
     <button (click)="addAnchors()" 
@@ -56,6 +53,60 @@
       <button (click)="startSpool()" 
               class="btn btn-outline-danger"
               [class.active]="drawingService.drawingMode === 'spool'">Spool</button>
+    </div>
+    
+    <button (click)="togglePiping()" 
+            class="btn btn-info"
+            [class.active]="showPipingTools">Piping</button>
+    
+    <div class="piping-tools" *ngIf="showPipingTools">
+      <button (click)="startFlow()" 
+              class="btn btn-outline-info"
+              [class.active]="drawingService.drawingMode === 'flow'">Flow</button>
+      
+      <button (click)="toggleValves()" 
+              class="btn btn-outline-info"
+              [class.active]="showValveTools">Valves</button>
+      
+      <div class="valve-tools" *ngIf="showValveTools" style="margin-left: 10px; display: inline-block;">
+        <button (click)="toggleGateValve()" 
+                class="btn btn-sm btn-outline-info"
+                [class.active]="showGateValveTools">Gate</button>
+        <button (click)="toggleGlobeValve()" 
+                class="btn btn-sm btn-outline-info"
+                [class.active]="showGlobeValveTools">Globe</button>
+        <button (click)="toggleBallValve()" 
+                class="btn btn-sm btn-outline-info"
+                [class.active]="showBallValveTools">Ball</button>
+        <button class="btn btn-sm btn-outline-info" disabled>Check</button>
+        
+        <div class="gate-valve-tools" *ngIf="showGateValveTools" style="margin-left: 5px; display: inline-block;">
+          <button (click)="startGateValveS()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'gateValveS'">S</button>
+          <button (click)="startGateValveFL()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'gateValveFL'">FL</button>
+        </div>
+        
+        <div class="globe-valve-tools" *ngIf="showGlobeValveTools" style="margin-left: 5px; display: inline-block;">
+          <button (click)="startGlobeValveS()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'globeValveS'">S</button>
+          <button (click)="startGlobeValveFL()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'globeValveFL'">FL</button>
+        </div>
+        
+        <div class="ball-valve-tools" *ngIf="showBallValveTools" style="margin-left: 5px; display: inline-block;">
+          <button (click)="startBallValveS()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'ballValveS'">S</button>
+          <button (click)="startBallValveFL()" 
+                  class="btn btn-sm btn-outline-secondary"
+                  [class.active]="drawingService.drawingMode === 'ballValveFL'">FL</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

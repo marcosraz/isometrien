@@ -19,6 +19,21 @@
   margin-left: 20px;
 }
 
+.piping-tools {
+  display: flex;
+  gap: 10px;
+  margin-left: 20px;
+  align-items: center;
+}
+
+.valve-tools {
+  display: inline-flex;
+  gap: 5px;
+  padding: 5px;
+  background-color: rgba(0, 123, 255, 0.1);
+  border-radius: 4px;
+}
+
 .btn {
   transition: all 0.3s ease;
 }

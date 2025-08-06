@@ -179,48 +179,4 @@ export class ObjectManagementService {
     return false;
   }
 
-  public addIsometricLine(canvas: fabric.Canvas): void {
-    const isoLine = new fabric.Line([100, 100, 300, 200], {
-      stroke: 'blue',
-      strokeWidth: 3,
-    });
-    canvas.add(isoLine);
-  }
-
-  public addArc(canvas: fabric.Canvas): void {
-    const arc = new fabric.Path('M 100 100 A 50 50 0 0 1 200 100', {
-      left: 150,
-      top: 150,
-      stroke: 'red',
-      strokeWidth: 2,
-      fill: '',
-    });
-    canvas.add(arc);
-  }
-
-  public addValve(canvas: fabric.Canvas): void {
-    const triangle1 = new fabric.Triangle({
-      width: 20,
-      height: 30,
-      fill: 'black',
-      angle: -90,
-    });
-    const triangle2 = new fabric.Triangle({
-      width: 20,
-      height: 30,
-      fill: 'black',
-      angle: 90,
-    });
-
-    const width1 = triangle1.get('width') as number;
-    triangle1.set('left', -width1);
-    triangle2.set('left', 0);
-
-    const valve = new fabric.Group([triangle1, triangle2], {
-      left: 250,
-      top: 250,
-    });
-
-    canvas.add(valve);
-  }
 }

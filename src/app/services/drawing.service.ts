@@ -6,6 +6,7 @@ import { DimensionService } from './dimension.service';
 import { ObjectManagementService } from './object-management.service';
 import { WeldingService } from './welding.service';
 import { StateManagementService } from './state-management.service';
+import { PipingService } from './piping.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -22,19 +23,22 @@ export class DrawingService {
     private dimensionService: DimensionService,
     private objectManagementService: ObjectManagementService,
     private weldingService: WeldingService,
-    private stateManagementService: StateManagementService
+    private stateManagementService: StateManagementService,
+    private pipingService: PipingService
   ) {
     // Connect state management to services
     this.lineDrawingService.setStateManagement(this.stateManagementService);
     this.dimensionService.setStateManagement(this.stateManagementService);
     this.weldingService.setStateManagement(this.stateManagementService);
     this.objectManagementService.setStateManagement(this.stateManagementService);
+    this.pipingService.setStateManagement(this.stateManagementService);
   }
 
   public setCanvas(canvas: fabric.Canvas): void {
     this.canvas = canvas;
     this.lineDrawingService.setCanvas(canvas);
     this.weldingService.setCanvas(canvas);
+    this.pipingService.setCanvas(canvas);
   }
 
   public requestRedraw(): void {
@@ -84,7 +88,7 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL'
   ): void {
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
@@ -113,6 +117,30 @@ export class DrawingService {
     } else if (mode === 'spool') {
       this.lineDrawingService.setDrawingMode('spool');
       this.objectManagementService.startSpoolMode();
+    } else if (mode === 'flow') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startFlowMode();
+    } else if (mode === 'gateValve') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveMode();
+    } else if (mode === 'gateValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveSMode();
+    } else if (mode === 'gateValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveFLMode();
+    } else if (mode === 'globeValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGlobeValveSMode();
+    } else if (mode === 'globeValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGlobeValveFLMode();
+    } else if (mode === 'ballValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startBallValveSMode();
+    } else if (mode === 'ballValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startBallValveFLMode();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -121,6 +149,14 @@ export class DrawingService {
       this.weldingService.stopWeld();
       this.weldingService.stopFluidStamp();
       this.objectManagementService.stopSpoolMode();
+      this.pipingService.stopFlowMode();
+      this.pipingService.stopGateValveMode();
+      this.pipingService.stopGateValveSMode();
+      this.pipingService.stopGateValveFLMode();
+      this.pipingService.stopGlobeValveSMode();
+      this.pipingService.stopGlobeValveFLMode();
+      this.pipingService.stopBallValveSMode();
+      this.pipingService.stopBallValveFLMode();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -128,6 +164,11 @@ export class DrawingService {
   public handleMouseDown(options: any): void {
     if (this.weldingService.isActive()) {
       this.weldingService.handleMouseDown(options);
+      return;
+    }
+
+    if (this.pipingService.isActive()) {
+      this.pipingService.handleMouseDown(options);
       return;
     }
 
@@ -158,6 +199,11 @@ export class DrawingService {
   public handleMouseMove(options: any): void {
     if (this.weldingService.isActive()) {
       this.weldingService.handleMouseMove(options);
+      return;
+    }
+
+    if (this.pipingService.isActive()) {
+      this.pipingService.handleMouseMove(options);
       return;
     }
 
@@ -224,32 +270,45 @@ export class DrawingService {
     this.objectManagementService.deleteSelectedObjects(this.canvas);
   }
 
-  public addIsometricLine(): void {
-    this.objectManagementService.addIsometricLine(this.canvas);
-  }
-
-  public addArc(): void {
-    this.objectManagementService.addArc(this.canvas);
-  }
-
-  public addValve(): void {
-    this.objectManagementService.addValve(this.canvas);
-  }
 
   public addAnchors(): void {
     this.setDrawingMode('addAnchors');
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
     }
+    if (this.pipingService.isFlowModeActive()) {
+      return 'flow';
+    }
+    if (this.pipingService.isGateValveModeActive()) {
+      return 'gateValve';
+    }
+    if (this.pipingService.isGateValveSModeActive()) {
+      return 'gateValveS';
+    }
+    if (this.pipingService.isGateValveFLModeActive()) {
+      return 'gateValveFL';
+    }
+    if (this.pipingService.isGlobeValveSModeActive()) {
+      return 'globeValveS';
+    }
+    if (this.pipingService.isGlobeValveFLModeActive()) {
+      return 'globeValveFL';
+    }
+    if (this.pipingService.isBallValveSModeActive()) {
+      return 'ballValveS';
+    }
+    if (this.pipingService.isBallValveFLModeActive()) {
+      return 'ballValveFL';
+    }
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
@@ -268,6 +327,30 @@ export class DrawingService {
     } else if (mode === 'fluidstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startFluidStamp();
+    } else if (mode === 'flow') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startFlowMode();
+    } else if (mode === 'gateValve') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveMode();
+    } else if (mode === 'gateValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveSMode();
+    } else if (mode === 'gateValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGateValveFLMode();
+    } else if (mode === 'globeValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGlobeValveSMode();
+    } else if (mode === 'globeValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startGlobeValveFLMode();
+    } else if (mode === 'ballValveS') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startBallValveSMode();
+    } else if (mode === 'ballValveFL') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startBallValveFLMode();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -275,6 +358,14 @@ export class DrawingService {
       this.weldingService.stopWelderStampAS();
       this.weldingService.stopWeld();
       this.weldingService.stopFluidStamp();
+      this.pipingService.stopFlowMode();
+      this.pipingService.stopGateValveMode();
+      this.pipingService.stopGateValveSMode();
+      this.pipingService.stopGateValveFLMode();
+      this.pipingService.stopGlobeValveSMode();
+      this.pipingService.stopGlobeValveFLMode();
+      this.pipingService.stopBallValveSMode();
+      this.pipingService.stopBallValveFLMode();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
