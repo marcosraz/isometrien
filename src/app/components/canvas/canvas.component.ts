@@ -93,11 +93,27 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (this.htmlCanvas) {
+      // Get the actual container dimensions
+      const container = this.htmlCanvas.nativeElement.parentElement;
+      const width = container?.clientWidth || window.innerWidth - 260;
+      const height = container?.clientHeight || window.innerHeight - 60;
+      
       this.canvas = new fabric.Canvas(this.htmlCanvas.nativeElement, {
         selection: true,
-        width: 1200,
-        height: 800,
+        width: width,
+        height: height,
         backgroundColor: '#f3f3f3',
+      });
+      
+      // Resize canvas when window resizes
+      window.addEventListener('resize', () => {
+        const newWidth = container?.clientWidth || window.innerWidth - 260;
+        const newHeight = container?.clientHeight || window.innerHeight - 60;
+        this.canvas.setDimensions({
+          width: newWidth,
+          height: newHeight
+        });
+        this.canvas.requestRenderAll();
       });
       this.drawingService.setCanvas(this.canvas);
       this.stateManagement.setCanvas(this.canvas);

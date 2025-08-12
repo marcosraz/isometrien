@@ -35,6 +35,7 @@ export class LineDrawingService {
   private originalAnchorColor: string | null = null;
 
   private stateManagement: StateManagementService | null = null;
+  private drawingService: any = null;
   
   constructor(private isometryService: IsometryService) {
     // Lausche auf Tasten
@@ -88,8 +89,15 @@ export class LineDrawingService {
           }
         });
       } else {
-        // Regular anchor point
-        this.highlightedAnchor.set('fill', this.originalAnchorColor);
+        // Regular anchor point - restore original fill and stroke
+        if (this.originalAnchorColor === 'transparent') {
+          this.highlightedAnchor.set({
+            'fill': 'transparent',
+            'stroke': this.getColor('anchor')
+          });
+        } else {
+          this.highlightedAnchor.set('fill', this.originalAnchorColor);
+        }
       }
       this.highlightedAnchor = null;
       this.originalAnchorColor = null;
@@ -104,7 +112,7 @@ export class LineDrawingService {
       // Check if it's a weld point (group) or regular anchor
       if (anchor.type === 'group' && (anchor as any).isWeldPoint) {
         // For weld points, change the line colors to green
-        this.originalAnchorColor = 'red'; // Store original color
+        this.originalAnchorColor = 'red'; // Store original color for weld points
         const objects = (anchor as fabric.Group).getObjects();
         objects.forEach((obj: any) => {
           if (obj.type === 'line') {
@@ -155,7 +163,7 @@ export class LineDrawingService {
   }
 
   private snapToAngle(start: { x: number; y: number }, end: { x: number; y: number }): { x: number; y: number } {
-    if (!this.isShiftPressed && !this.snapEnabled) return end;
+    if (!this.isShiftPressed && !this.snapEnabled && !this.snap15Enabled && !this.snap45Enabled) return end;
 
     const dx = end.x - start.x;
     const dy = end.y - start.y;
@@ -164,8 +172,18 @@ export class LineDrawingService {
     // Berechne den Winkel in Grad
     let angle = Math.atan2(dy, dx) * 180 / Math.PI;
     
-    // Runde auf das nächste 30° Vielfache
-    const snappedAngle = Math.round(angle / 30) * 30;
+    // Bestimme den Snap-Winkel basierend auf den aktiven Modi
+    let snapAngle = 30; // Standard
+    if (this.isShiftPressed || this.snap15Enabled) {
+      snapAngle = 15;
+    } else if (this.snap45Enabled) {
+      snapAngle = 45;
+    } else if (this.snapEnabled) {
+      snapAngle = 30;
+    }
+    
+    // Runde auf das nächste Vielfache des snap angles
+    const snappedAngle = Math.round(angle / snapAngle) * snapAngle;
     const snappedRad = snappedAngle * Math.PI / 180;
     
     return {
@@ -188,10 +206,13 @@ export class LineDrawingService {
         }
       }
       
-      // Erstelle einen roten Ankerpunkt
+      // Erstelle einen transparenten Ankerpunkt
       const anchor = new fabric.Circle({
-        radius: 5,
-        fill: 'red',
+        radius: 2,
+        fill: 'transparent',
+        stroke: this.getColor('anchor'),
+        strokeWidth: 1,
+        opacity: 0.3,  // Sehr transparent
         left: anchorPos.x,
         top: anchorPos.y,
         originX: 'center',
@@ -235,7 +256,7 @@ export class LineDrawingService {
         }
         
         // Apply angle snapping if enabled (Shift key or toggle)
-        if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+        if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
           endPoint = this.snapToAngle(this.lineStartPoint, endPoint);
         }
         
@@ -247,7 +268,7 @@ export class LineDrawingService {
             endPoint.y,
           ],
           {
-            stroke: 'black',
+            stroke: this.getColor('line'),
             strokeWidth: 2,
             selectable: false,
             evented: false,
@@ -259,8 +280,11 @@ export class LineDrawingService {
             canvas.add(line);
 
             const startCircle = new fabric.Circle({
-              radius: 5,
-              fill: 'red',
+              radius: 2,
+              fill: 'transparent',
+              stroke: this.getColor('anchor'),
+              strokeWidth: 1,
+              opacity: 0.3,  // Sehr transparent
               left: line.x1,
               top: line.y1,
               originX: 'center',
@@ -272,8 +296,11 @@ export class LineDrawingService {
             });
 
             const endCircle = new fabric.Circle({
-              radius: 5,
-              fill: 'red',
+              radius: 2,
+              fill: 'transparent',
+              stroke: this.getColor('anchor'),
+              strokeWidth: 1,
+              opacity: 0.3,  // Sehr transparent
               left: line.x2,
               top: line.y2,
               originX: 'center',
@@ -298,8 +325,11 @@ export class LineDrawingService {
           canvas.add(line);
 
           const startCircle = new fabric.Circle({
-            radius: 5,
-            fill: 'red',
+            radius: 2,
+            fill: 'transparent',
+            stroke: this.getColor('anchor'),
+            strokeWidth: 1,
+            opacity: 0.3,  // Sehr transparent
             left: line.x1,
             top: line.y1,
             originX: 'center',
@@ -311,8 +341,11 @@ export class LineDrawingService {
           });
 
           const endCircle = new fabric.Circle({
-            radius: 5,
-            fill: 'red',
+            radius: 2,
+            fill: 'transparent',
+            stroke: this.getColor('anchor'),
+            strokeWidth: 1,
+            opacity: 0.3,  // Sehr transparent
             left: line.x2,
             top: line.y2,
             originX: 'center',
@@ -354,7 +387,7 @@ export class LineDrawingService {
       }
       
       // Apply angle snapping if enabled (Shift key or toggle)
-      if ((this.isShiftPressed || this.snapEnabled) && this.pipePoints.length > 0 && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+      if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && this.pipePoints.length > 0 && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         const lastPoint = this.pipePoints[this.pipePoints.length - 1];
         clickPoint = this.snapToAngle(lastPoint, clickPoint);
       }
@@ -364,8 +397,11 @@ export class LineDrawingService {
 
       // Erstelle einen Ankerpunkt
       const anchor = new fabric.Circle({
-        radius: 5,
-        fill: 'red',
+        radius: 2,
+        fill: 'transparent',
+        stroke: this.getColor('anchor'),
+        strokeWidth: 1,
+        opacity: 0.3,  // Sehr transparent
         left: clickPoint.x,
         top: clickPoint.y,
         selectable: true,
@@ -407,8 +443,8 @@ export class LineDrawingService {
         const line = new fabric.Line(
           [p1.x, p1.y, p2.x, p2.y],
           {
-            stroke: 'green',
-            strokeWidth: 5,
+            stroke: this.getColor('pipe'),
+            strokeWidth: 1,
             selectable: false,
             evented: false,
           }
@@ -444,7 +480,7 @@ export class LineDrawingService {
         
         // Erstelle Ankerpunkte für den Bogen
         const arcStartAnchor = new fabric.Circle({
-          radius: 5, // Größer für bessere Klickbarkeit
+          radius: 2, // Normale Größe für blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -459,7 +495,7 @@ export class LineDrawingService {
         });
         
         const arcEndAnchor = new fabric.Circle({
-          radius: 5, // Größer für bessere Klickbarkeit
+          radius: 2, // Normale Größe für blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -490,8 +526,8 @@ export class LineDrawingService {
         const pathString = `M ${arcStart.x} ${arcStart.y} Q ${p1.x} ${p1.y}, ${arcEnd.x} ${arcEnd.y}`;
         const arc = new fabric.Path(pathString, {
           fill: '',
-          stroke: 'green',
-          strokeWidth: 5,
+          stroke: this.getColor('pipe'),
+          strokeWidth: 1,
           selectable: false,
           evented: false,
         });
@@ -502,8 +538,8 @@ export class LineDrawingService {
         const line = new fabric.Line(
           [arcEnd.x, arcEnd.y, p2.x, p2.y],
           {
-            stroke: 'green',
-            strokeWidth: 5,
+            stroke: this.getColor('pipe'),
+            strokeWidth: 1,
             selectable: false,
             evented: false,
           }
@@ -550,10 +586,11 @@ export class LineDrawingService {
       
       // Erstelle Vorschau
       this.anchorPreview = new fabric.Circle({
-        radius: 5,
-        fill: 'rgba(255, 0, 0, 0.5)',
-        stroke: 'red',
+        radius: 2,
+        fill: 'transparent',
+        stroke: this.getColor('anchor'),
         strokeWidth: 1,
+        opacity: 0.3,  // Sehr transparent
         left: previewPos.x,
         top: previewPos.y,
         originX: 'center',
@@ -577,30 +614,30 @@ export class LineDrawingService {
       }
       
       let endPoint = { x: pointer.x, y: pointer.y };
-      let strokeColor = 'black';
+      let strokeColor = this.getColor('line');
       
       // Check for anchor snapping with Ctrl key
       if (this.isCtrlPressed) {
         const nearestAnchor = this.findNearestAnchor(pointer, canvas);
         if (nearestAnchor) {
           endPoint = nearestAnchor;
-          strokeColor = 'green';
+          strokeColor = this.getColor('pipe');
           // Highlight the anchor
           this.highlightAnchor(nearestAnchor.object!);
         }
       }
       
       // Apply angle snapping if enabled (Shift key or toggle)
-      if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+      if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         endPoint = this.snapToAngle(this.lineStartPoint, endPoint);
       }
       
       this.previewLine = new fabric.Line(
         [this.lineStartPoint.x, this.lineStartPoint.y, endPoint.x, endPoint.y],
         {
-          stroke: strokeColor === 'green' ? 'green' : 'rgba(0,0,0,0.3)',
+          stroke: strokeColor,
           strokeDashArray: [5, 5],
-          strokeWidth: strokeColor === 'green' ? 3 : 2,
+          strokeWidth: 2,
           selectable: false,
           evented: false,
         }
@@ -623,21 +660,21 @@ export class LineDrawingService {
 
       const lastPoint = this.pipePoints[this.pipePoints.length - 1];
       let endPoint = { x: pointer.x, y: pointer.y };
-      let strokeColor = 'rgba(0,128,0,0.5)';
+      let strokeColor = this.getColor('pipe');
       
       // Check for anchor snapping with Ctrl key
       if (this.isCtrlPressed) {
         const nearestAnchor = this.findNearestAnchor(pointer, canvas);
         if (nearestAnchor) {
           endPoint = nearestAnchor;
-          strokeColor = 'green';
+          strokeColor = this.getColor('pipe');
           // Highlight the anchor
           this.highlightAnchor(nearestAnchor.object!);
         }
       }
       
       // Apply angle snapping if enabled (Shift key or toggle)
-      if ((this.isShiftPressed || this.snapEnabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+      if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
         endPoint = this.snapToAngle(lastPoint, endPoint);
       }
       
@@ -646,7 +683,7 @@ export class LineDrawingService {
         {
           stroke: strokeColor,
           strokeDashArray: [5, 5],
-          strokeWidth: strokeColor === 'green' ? 6 : 5,
+          strokeWidth: 1,
           selectable: false,
           evented: false,
         }
@@ -778,9 +815,9 @@ export class LineDrawingService {
     // Update die Hauptpunkte basierend auf dem bewegten Ankerpunkt
     const anchor = pipe.anchors[anchorIndex];
     
-    // Finde welcher Hauptpunkt das ist (rote Ankerpunkte)
-    const redAnchors = pipe.anchors.filter(a => (a as any).fill === 'red');
-    const mainPointIndex = redAnchors.findIndex(a => a === anchor);
+    // Finde welcher Hauptpunkt das ist (transparente Hauptankerpunkte)
+    const mainAnchors = pipe.anchors.filter(a => (a as any).fill === 'transparent');
+    const mainPointIndex = mainAnchors.findIndex(a => a === anchor);
     
     if (mainPointIndex !== -1 && pipe.mainPoints) {
       // Update den Hauptpunkt
@@ -845,7 +882,7 @@ export class LineDrawingService {
     pipe.segments.forEach(segment => canvas.remove(segment));
     pipe.segments = [];
     
-    // Entferne blaue Ankerpunkte (behalte nur rote)
+    // Entferne blaue Ankerpunkte (behalte nur transparente Hauptankerpunkte)
     const blueAnchors = pipe.anchors.filter(a => (a as any).fill === 'blue');
     blueAnchors.forEach(anchor => {
       canvas.remove(anchor);
@@ -865,8 +902,8 @@ export class LineDrawingService {
         const line = new fabric.Line(
           [p1.x, p1.y, p2.x, p2.y],
           {
-            stroke: 'green',
-            strokeWidth: 5,
+            stroke: this.getColor('pipe'),
+            strokeWidth: 1,
             selectable: true,
             evented: true,
           }
@@ -902,7 +939,7 @@ export class LineDrawingService {
         
         // Erstelle neue blaue Ankerpunkte
         const arcStartAnchor = new fabric.Circle({
-          radius: 5, // Größer für bessere Klickbarkeit
+          radius: 2, // Normale Größe für blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -917,7 +954,7 @@ export class LineDrawingService {
         });
         
         const arcEndAnchor = new fabric.Circle({
-          radius: 5, // Größer für bessere Klickbarkeit
+          radius: 2, // Normale Größe für blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -948,8 +985,8 @@ export class LineDrawingService {
         const pathString = `M ${arcStart.x} ${arcStart.y} Q ${p1.x} ${p1.y}, ${arcEnd.x} ${arcEnd.y}`;
         const arc = new fabric.Path(pathString, {
           fill: '',
-          stroke: 'green',
-          strokeWidth: 5,
+          stroke: this.getColor('pipe'),
+          strokeWidth: 1,
           selectable: true,
           evented: true,
         });
@@ -960,8 +997,8 @@ export class LineDrawingService {
         const line = new fabric.Line(
           [arcEnd.x, arcEnd.y, p2.x, p2.y],
           {
-            stroke: 'green',
-            strokeWidth: 5,
+            stroke: this.getColor('pipe'),
+            strokeWidth: 1,
             selectable: true,
             evented: true,
           }
@@ -1035,10 +1072,37 @@ export class LineDrawingService {
   public setStateManagement(stateManagement: StateManagementService): void {
     this.stateManagement = stateManagement;
   }
+  
+  public setDrawingService(drawingService: any): void {
+    this.drawingService = drawingService;
+  }
+  
+  private getColor(element: string): string {
+    if (this.drawingService && this.drawingService.getColor) {
+      return this.drawingService.getColor(element);
+    }
+    // Fallback colors if drawingService not available
+    const fallbackColors: any = {
+      'line': 'black',
+      'pipe': 'green',
+      'anchor': 'rgba(128, 128, 128, 0.5)'
+    };
+    return fallbackColors[element] || 'black';
+  }
   private snapEnabled: boolean = false;
+  private snap15Enabled: boolean = false;
+  private snap45Enabled: boolean = false;
   
   public setSnapToAngle(enabled: boolean): void {
     this.snapEnabled = enabled;
+  }
+  
+  public setSnapTo15Angle(enabled: boolean): void {
+    this.snap15Enabled = enabled;
+  }
+  
+  public setSnapTo45Angle(enabled: boolean): void {
+    this.snap45Enabled = enabled;
   }
   
   private finishPipe(): void {

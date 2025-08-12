@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { StateManagementService } from './state-management.service';
+import { createGateValveSNew, createGateValveFLNew } from './piping-valve-helper';
 
 @Injectable({
   providedIn: 'root',
@@ -19,6 +20,7 @@ export class PipingService {
   private previewArrow: fabric.Group | null = null;
   private previewValve: fabric.Group | null = null;
   private isShiftPressed: boolean = false;
+  private isCtrlPressed: boolean = false;
   private hoveredLine: fabric.Line | fabric.Path | null = null;
   private originalLineStroke: string | null = null;
 
@@ -320,46 +322,251 @@ export class PipingService {
     return group;
   }
 
-  private createGateValveS(x: number, y: number, angle: number): fabric.Group {
+  private createGateValveS(x: number, y: number, angle: number, mirrored: boolean = false): fabric.Group {
     // Create gate valve S variant (two triangles meeting at their tips)
-    // Add white rectangle background to hide the line
-    const background = new fabric.Rect({
-      width: 30,
-      height: 20,
-      fill: 'white',
-      stroke: null,
-      originX: 'center',
-      originY: 'center'
-    });
+    // Normalize the line angle
+    const normalizedAngle = ((angle % 360) + 360) % 360;
     
-    const triangle1 = new fabric.Polygon([
-      { x: -15, y: -10 },  // Left top
-      { x: -15, y: 10 },   // Left bottom
-      { x: 0, y: 0 },      // Right point (tip touching center)
-    ], {
-      fill: 'white',
-      stroke: 'black',
-      strokeWidth: 2,
-      originX: 'center',
-      originY: 'center'
-    });
+    let triangle1, triangle2;
+    let valveAngle = angle;
     
-    const triangle2 = new fabric.Polygon([
-      { x: 15, y: -10 },   // Right top
-      { x: 15, y: 10 },    // Right bottom
-      { x: 0, y: 0 },      // Left point (tip touching center)
-    ], {
-      fill: 'white',
-      stroke: 'black',
-      strokeWidth: 2,
-      originX: 'center',
-      originY: 'center'
-    });
+    // Check if this is a vertical line (around 90° or 270°)
+    if ((normalizedAngle >= 80 && normalizedAngle <= 100) || 
+        (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+      // For vertical lines, create triangles pointing at 120° and 240° (isometric diagonal)
+      // Like in the reference image where green lines show the valve orientation
+      
+      if (!mirrored) {
+        // Normal orientation - First triangle pointing toward upper-left (120°)
+        triangle1 = new fabric.Polygon([
+          { x: -12, y: -20 },   // Upper left vertex (größer)
+          { x: -12, y: -3 },    // Lower left vertex  
+          { x: 0, y: 0 },      // Tip at center
+        ], {
+          fill: 'white',  // Weiß um die Linie zu verdecken
+          stroke: 'black',
+          strokeWidth: 2,
+          originX: 'center',
+          originY: 'center'
+        });
+        
+        // Second triangle pointing toward lower-right (240°)
+        triangle2 = new fabric.Polygon([
+          { x: 12, y: 20 },     // Lower right vertex (größer)
+          { x: 12, y: 3 },      // Upper right vertex
+          { x: 0, y: 0 },      // Tip at center
+        ], {
+          fill: 'white',  // Weiß um die Linie zu verdecken
+          stroke: 'black',
+          strokeWidth: 2,
+          originX: 'center',
+          originY: 'center'
+        });
+        
+        valveAngle = 45;
+      } else {
+        // Mirrored orientation (Ctrl pressed) - swap the triangles
+        triangle1 = new fabric.Polygon([
+          { x: 12, y: -20 },    // Upper right vertex (größer)
+          { x: 12, y: -3 },     // Lower right vertex
+          { x: 0, y: 0 },      // Tip at center
+        ], {
+          fill: 'white',  // Weiß um die Linie zu verdecken
+          stroke: 'black',
+          strokeWidth: 2,
+          originX: 'center',
+          originY: 'center'
+        });
+        
+        triangle2 = new fabric.Polygon([
+          { x: -12, y: 20 },    // Lower left vertex (größer)
+          { x: -12, y: 3 },     // Upper left vertex
+          { x: 0, y: 0 },      // Tip at center
+        ], {
+          fill: 'white',  // Weiß um die Linie zu verdecken
+          stroke: 'black',
+          strokeWidth: 2,
+          originX: 'center',
+          originY: 'center'
+        });
+        
+        valveAngle = 135;  // 135° rotation for mirrored version
+      }
+    } else if ((normalizedAngle >= 20 && normalizedAngle <= 40) || 
+               (normalizedAngle >= 200 && normalizedAngle <= 220)) {
+      // For 30° and 210° lines (isometric horizontal)
+      // Triangles should point at 60° and 240° angles
+      
+      triangle1 = new fabric.Polygon([
+        { x: -12, y: 20 },    // Lower left vertex (größer)
+        { x: -12, y: 3 },     // Upper left vertex
+        { x: 0, y: 0 },      // Tip at center
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+      triangle2 = new fabric.Polygon([
+        { x: 12, y: -20 },    // Upper right vertex (größer)
+        { x: 12, y: -3 },     // Lower right vertex
+        { x: 0, y: 0 },      // Tip at center
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+      valveAngle = 0;
+    } else if ((normalizedAngle >= 140 && normalizedAngle <= 160) || 
+               (normalizedAngle >= 320 && normalizedAngle <= 340)) {
+      // For 150° and 330° lines (isometric opposite horizontal)
+      // Standard horizontal triangles
+      
+      triangle1 = new fabric.Polygon([
+        { x: -20, y: -12 },  // Left top (größer)
+        { x: -20, y: 12 },   // Left bottom
+        { x: 0, y: 0 },      // Right point (tip touching center)
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+      triangle2 = new fabric.Polygon([
+        { x: 20, y: -12 },   // Right top (größer)
+        { x: 20, y: 12 },    // Right bottom
+        { x: 0, y: 0 },      // Left point (tip touching center)
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+      valveAngle = 0;
+    } else {
+      // For all other angles, use standard configuration aligned with line
+      triangle1 = new fabric.Polygon([
+        { x: -20, y: -12 },  // Left top (größer)
+        { x: -20, y: 12 },   // Left bottom
+        { x: 0, y: 0 },      // Right point (tip touching center)
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+      
+      triangle2 = new fabric.Polygon([
+        { x: 20, y: -12 },   // Right top (größer)
+        { x: 20, y: 12 },    // Right bottom
+        { x: 0, y: 0 },      // Left point (tip touching center)
+      ], {
+        fill: 'transparent',  // Transparent statt weiß
+        stroke: 'black',
+        strokeWidth: 2,
+        originX: 'center',
+        originY: 'center'
+      });
+    }
     
-    const group = new fabric.Group([background, triangle1, triangle2], {
+    // Create small anchor points at the outer edges where triangles meet the line
+    let anchorRadius = 3; // Slightly bigger for better visibility
+    let anchorOpacity = 0.5; // More visible
+    
+    // Calculate anchor positions - where the outer edges of triangles cross the line
+    let anchor1X, anchor1Y, anchor2X, anchor2Y;
+    
+    if ((normalizedAngle >= 80 && normalizedAngle <= 100) || 
+        (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+      // Vertical lines - anchors where the outer triangle edges cross the vertical line
+      // For 45° rotated triangles, the outer edge crosses much closer to center
+      const distance = 8; // Distance from center to where triangle outer edge crosses the vertical line
+      
+      if (!mirrored) {
+        // Normal orientation - anchors above and below on the line
+        anchor1X = 0;  // On the vertical line
+        anchor1Y = -distance;  // Above, where top triangle's outer edge crosses
+        anchor2X = 0;  // On the vertical line
+        anchor2Y = distance;   // Below, where bottom triangle's outer edge crosses
+      } else {
+        // Mirrored (135° rotation) - same positions on vertical line
+        anchor1X = 0;  // On the vertical line
+        anchor1Y = -distance;  // Above
+        anchor2X = 0;  // On the vertical line
+        anchor2Y = distance;   // Below
+      }
+    } else if ((normalizedAngle >= 20 && normalizedAngle <= 40) || 
+               (normalizedAngle >= 200 && normalizedAngle <= 220)) {
+      // 30° and 210° lines - different triangle configuration
+      const distance = 14; // Distance for isometric horizontal lines
+      // For these angles, the anchors are at different positions
+      anchor1X = -distance;  // Left on the line
+      anchor1Y = 0;
+      anchor2X = distance;   // Right on the line
+      anchor2Y = 0;
+    } else if ((normalizedAngle >= 140 && normalizedAngle <= 160) || 
+               (normalizedAngle >= 320 && normalizedAngle <= 340)) {
+      // 150° and 330° lines
+      const distance = 20; // For horizontal triangles
+      anchor1X = -distance;  // Left on the line
+      anchor1Y = 0;
+      anchor2X = distance;   // Right on the line
+      anchor2Y = 0;
+    } else {
+      // Other angles - standard horizontal configuration
+      const distance = 20; // Distance from center for horizontal triangles
+      anchor1X = -distance;  // Left on the line
+      anchor1Y = 0;
+      anchor2X = distance;   // Right on the line
+      anchor2Y = 0;
+    }
+    
+    const anchor1 = new fabric.Circle({
+      left: anchor1X,
+      top: anchor1Y,
+      radius: anchorRadius,
+      fill: 'red',
+      stroke: 'darkred',
+      strokeWidth: 1,
+      opacity: anchorOpacity,
+      originX: 'center',
+      originY: 'center',
+      selectable: false,
+      evented: false
+    } as any);
+    (anchor1 as any).customType = 'anchorPoint';
+    (anchor1 as any).isAnchor = true;
+    
+    const anchor2 = new fabric.Circle({
+      left: anchor2X,
+      top: anchor2Y,
+      radius: anchorRadius,
+      fill: 'red',
+      stroke: 'darkred',
+      strokeWidth: 1,
+      opacity: anchorOpacity,
+      originX: 'center',
+      originY: 'center',
+      selectable: false,
+      evented: false
+    } as any);
+    (anchor2 as any).customType = 'anchorPoint';
+    (anchor2 as any).isAnchor = true;
+    
+    const group = new fabric.Group([triangle1, triangle2], {
       left: x,
       top: y,
-      angle: angle,
+      angle: valveAngle,
       selectable: true,
       hasControls: true,
       hasBorders: true,
@@ -373,6 +580,7 @@ export class PipingService {
       angle: angle,
       type: 'gateS'
     };
+    (group as any).anchors = [anchor1, anchor2];  // Store references to anchors
     
     return group;
   }
@@ -487,7 +695,7 @@ export class PipingService {
     
     // Add black dot in the center where triangles meet
     const centerDot = new fabric.Circle({
-      radius: 5,
+      radius: 3,
       fill: 'black',
       stroke: 'black',
       strokeWidth: 1,
@@ -556,7 +764,7 @@ export class PipingService {
     
     // Add black dot in the center where triangles meet
     const centerDot = new fabric.Circle({
-      radius: 5,
+      radius: 3,
       fill: 'black',
       stroke: 'black',
       strokeWidth: 1,
@@ -640,7 +848,7 @@ export class PipingService {
     
     // Add empty circle (only outline) in the center where triangles meet
     const centerCircle = new fabric.Circle({
-      radius: 7,
+      radius: 4,
       fill: 'white',
       stroke: 'black',
       strokeWidth: 2,
@@ -709,7 +917,7 @@ export class PipingService {
     
     // Add empty circle (only outline) in the center where triangles meet
     const centerCircle = new fabric.Circle({
-      radius: 7,
+      radius: 4,
       fill: 'white',
       stroke: 'black',
       strokeWidth: 2,
@@ -758,6 +966,11 @@ export class PipingService {
   public handleMouseMove(options: any): void {
     if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode)) return;
     
+    // Check Ctrl key directly from the mouse event
+    if (options.e && options.e.ctrlKey !== undefined) {
+      this.isCtrlPressed = options.e.ctrlKey;
+    }
+    
     const pointer = this.canvas.getPointer(options.e);
     const threshold = this.isShiftPressed ? 100 : 50; // Larger snap distance with Shift
     const nearest = this.findNearestLine(pointer);
@@ -798,9 +1011,9 @@ export class PipingService {
         this.cleanupValvePreview();
         
         if (this.gateValveSMode) {
-          this.previewValve = this.createGateValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+          this.previewValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
         } else if (this.gateValveFLMode) {
-          this.previewValve = this.createGateValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+          this.previewValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
         } else if (this.globeValveSMode) {
           this.previewValve = this.createGlobeValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
         } else if (this.globeValveFLMode) {
@@ -866,35 +1079,246 @@ export class PipingService {
         let valveType: string;
         
         if (this.gateValveSMode) {
-          gateValve = this.createGateValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+          gateValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
           valveType = 'Gate Valve S';
+          
+          // Calculate anchor positions based on line angle
+          const normalizedAngle = ((angle % 360) + 360) % 360;
+          const distance = 16; // Distance from valve center - optimal position
+          
+          let anchor1X, anchor1Y, anchor2X, anchor2Y;
+          
+          if ((normalizedAngle >= 80 && normalizedAngle <= 100) || 
+              (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+            // Vertical lines (90° or 270°) - anchors above and below
+            anchor1X = nearest.closestPoint.x;
+            anchor1Y = nearest.closestPoint.y - distance;
+            anchor2X = nearest.closestPoint.x;
+            anchor2Y = nearest.closestPoint.y + distance;
+          } else if ((normalizedAngle >= 20 && normalizedAngle <= 40) || 
+                     (normalizedAngle >= 200 && normalizedAngle <= 220)) {
+            // 30° and 210° lines (isometric right diagonal)
+            // Anchors along the 30° line direction
+            const rad = (30 * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          } else if ((normalizedAngle >= 140 && normalizedAngle <= 160) || 
+                     (normalizedAngle >= 320 && normalizedAngle <= 340)) {
+            // 150° and 330° lines (isometric left diagonal)
+            // Anchors along the 150° line direction
+            const rad = (150 * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          } else if ((normalizedAngle >= -10 && normalizedAngle <= 10) || 
+                     (normalizedAngle >= 170 && normalizedAngle <= 190) ||
+                     (normalizedAngle >= 350)) {
+            // Horizontal lines (0° or 180°) - anchors left and right
+            anchor1X = nearest.closestPoint.x - distance;
+            anchor1Y = nearest.closestPoint.y;
+            anchor2X = nearest.closestPoint.x + distance;
+            anchor2Y = nearest.closestPoint.y;
+          } else {
+            // Any other angle - calculate along the line direction
+            const rad = (normalizedAngle * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          }
+          
           // S variant doesn't split the line, just sits on top
           if (this.stateManagement) {
             this.stateManagement.executeOperation(`Add ${valveType}`, () => {
               this.canvas!.add(gateValve);
+              
+              // Add anchors as separate objects at the correct positions
+              const anchor1 = new fabric.Circle({
+                left: anchor1X,
+                top: anchor1Y,
+                radius: 1,  // Very small anchor points
+                fill: 'red',
+                stroke: 'darkred',
+                strokeWidth: 1,
+                opacity: 0.5,
+                originX: 'center',
+                originY: 'center',
+                selectable: false,
+                evented: false
+              } as any);
+              (anchor1 as any).customType = 'anchorPoint';
+              (anchor1 as any).isAnchor = true;
+              
+              const anchor2 = new fabric.Circle({
+                left: anchor2X,
+                top: anchor2Y,
+                radius: 1,  // Very small anchor points
+                fill: 'red',
+                stroke: 'darkred',
+                strokeWidth: 1,
+                opacity: 0.5,
+                originX: 'center',
+                originY: 'center',
+                selectable: false,
+                evented: false
+              } as any);
+              (anchor2 as any).customType = 'anchorPoint';
+              (anchor2 as any).isAnchor = true;
+              
+              this.canvas!.add(anchor1);
+              this.canvas!.add(anchor2);
+              
               this.canvas!.bringObjectToFront(gateValve);
               this.canvas!.requestRenderAll();
             });
           } else {
             this.canvas.add(gateValve);
+            
+            // Add anchors as separate objects at the correct positions
+            const anchor1 = new fabric.Circle({
+              left: anchor1X,
+              top: anchor1Y,
+              radius: 3,
+              fill: 'red',
+              stroke: 'darkred',
+              strokeWidth: 1,
+              opacity: 0.5,
+              originX: 'center',
+              originY: 'center',
+              selectable: false,
+              evented: false
+            } as any);
+            (anchor1 as any).customType = 'anchorPoint';
+            (anchor1 as any).isAnchor = true;
+            
+            const anchor2 = new fabric.Circle({
+              left: anchor2X,
+              top: anchor2Y,
+              radius: 3,
+              fill: 'red',
+              stroke: 'darkred',
+              strokeWidth: 1,
+              opacity: 0.5,
+              originX: 'center',
+              originY: 'center',
+              selectable: false,
+              evented: false
+            } as any);
+            (anchor2 as any).customType = 'anchorPoint';
+            (anchor2 as any).isAnchor = true;
+            
+            this.canvas.add(anchor1);
+            this.canvas.add(anchor2);
+            
             this.canvas.bringObjectToFront(gateValve);
             this.canvas.requestRenderAll();
           }
         } else if (this.gateValveFLMode) {
-          gateValve = this.createGateValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+          gateValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
           valveType = 'Gate Valve FL';
+          
+          // Calculate anchor positions for FL variant - at flange positions
+          const normalizedAngle = ((angle % 360) + 360) % 360;
+          const distance = 20; // Distance adjusted - slightly further out for FL variant
+          
+          let anchor1X, anchor1Y, anchor2X, anchor2Y;
+          
+          if ((normalizedAngle >= 80 && normalizedAngle <= 100) || 
+              (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+            // Vertical lines - anchors above and below
+            anchor1X = nearest.closestPoint.x;
+            anchor1Y = nearest.closestPoint.y - distance;
+            anchor2X = nearest.closestPoint.x;
+            anchor2Y = nearest.closestPoint.y + distance;
+          } else if ((normalizedAngle >= 20 && normalizedAngle <= 40) || 
+                     (normalizedAngle >= 200 && normalizedAngle <= 220)) {
+            // 30° lines
+            const rad = (30 * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          } else if ((normalizedAngle >= 140 && normalizedAngle <= 160) || 
+                     (normalizedAngle >= 320 && normalizedAngle <= 340)) {
+            // 150° lines
+            const rad = (150 * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          } else if ((normalizedAngle >= -10 && normalizedAngle <= 10) || 
+                     (normalizedAngle >= 170 && normalizedAngle <= 190) ||
+                     (normalizedAngle >= 350)) {
+            // Horizontal lines
+            anchor1X = nearest.closestPoint.x - distance;
+            anchor1Y = nearest.closestPoint.y;
+            anchor2X = nearest.closestPoint.x + distance;
+            anchor2Y = nearest.closestPoint.y;
+          } else {
+            // Any other angle
+            const rad = (normalizedAngle * Math.PI) / 180;
+            anchor1X = nearest.closestPoint.x - distance * Math.cos(rad);
+            anchor1Y = nearest.closestPoint.y - distance * Math.sin(rad);
+            anchor2X = nearest.closestPoint.x + distance * Math.cos(rad);
+            anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
+          }
+          
+          // Create anchor points
+          const anchor1 = new fabric.Circle({
+            left: anchor1X,
+            top: anchor1Y,
+            radius: 1,
+            fill: 'red',
+            stroke: 'darkred',
+            strokeWidth: 1,
+            opacity: 0.5,
+            originX: 'center',
+            originY: 'center',
+            selectable: false,
+            evented: false
+          });
+          (anchor1 as any).customType = 'anchorPoint';
+          (anchor1 as any).isAnchor = true;
+          
+          const anchor2 = new fabric.Circle({
+            left: anchor2X,
+            top: anchor2Y,
+            radius: 1,
+            fill: 'red',
+            stroke: 'darkred',
+            strokeWidth: 1,
+            opacity: 0.5,
+            originX: 'center',
+            originY: 'center',
+            selectable: false,
+            evented: false
+          });
+          (anchor2 as any).customType = 'anchorPoint';
+          (anchor2 as any).isAnchor = true;
+          
           // FL variant splits the line
           if (this.stateManagement) {
             this.stateManagement.executeOperation(`Add ${valveType}`, () => {
               this.splitLineAtValve(nearest.line, nearest.closestPoint, gateValve, true);
               this.canvas!.add(gateValve);
+              this.canvas!.add(anchor1);
+              this.canvas!.add(anchor2);
               this.canvas!.bringObjectToFront(gateValve);
+              this.canvas!.bringObjectToFront(anchor1);
+              this.canvas!.bringObjectToFront(anchor2);
               this.canvas!.requestRenderAll();
             });
           } else {
             this.splitLineAtValve(nearest.line, nearest.closestPoint, gateValve, true);
             this.canvas.add(gateValve);
+            this.canvas.add(anchor1);
+            this.canvas.add(anchor2);
             this.canvas.bringObjectToFront(gateValve);
+            this.canvas.bringObjectToFront(anchor1);
+            this.canvas.bringObjectToFront(anchor2);
             this.canvas.requestRenderAll();
           }
         } else {

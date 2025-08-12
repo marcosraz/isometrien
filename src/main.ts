@@ -1,6 +1,7 @@
 import "zone.js";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { provideRouter } from "@angular/router";
+import { IMAGE_CONFIG } from '@angular/common';
 import { AppComponent } from "./app/app.component";
 
 // We are now bootstrapping the main AppComponent directly, which is the
@@ -10,5 +11,13 @@ bootstrapApplication(AppComponent, {
   providers: [
     // Sets up the router. We don't have any routes yet, so we pass an empty array.
     provideRouter([]),
+    // Disable oversized image warnings
+    {
+      provide: IMAGE_CONFIG,
+      useValue: {
+        disableImageSizeWarning: true,
+        disableImageLazyLoadWarning: true
+      }
+    }
   ],
 }).catch((err) => console.error(err));

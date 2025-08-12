@@ -14,12 +14,17 @@ import { ObjectManagementService } from '../../services/object-management.servic
 })
 export class ToolbarComponent {
   public snapToAngle: boolean = false;
+  public snapTo15Angle: boolean = false;
+  public snapTo45Angle: boolean = false;
   public showWeldingTools: boolean = false;
   public showPipingTools: boolean = false;
   public showValveTools: boolean = false;
   public showGateValveTools: boolean = false;
   public showGlobeValveTools: boolean = false;
   public showBallValveTools: boolean = false;
+  public sidebarCollapsed: boolean = false;
+  public activeSection: string = 'drawing';
+  public colorMode: 'drawing' | 'blackwhite' | 'norm' = 'drawing';
   private escPressCount: number = 0;
   private escResetTimeout: any = null;
   
@@ -29,6 +34,9 @@ export class ToolbarComponent {
     private dimensionService: DimensionService,
     private objectManagementService: ObjectManagementService
   ) {
+    // Initialize color mode from drawing service
+    this.colorMode = this.drawingService.colorMode;
+    
     // Listen for ESC key and custom events
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -67,6 +75,11 @@ export class ToolbarComponent {
     });
     
     window.addEventListener('exitBallValveFLMode', () => {
+      this.drawingService.setDrawingMode('idle');
+    });
+    
+    // Listen for slope mode exit event
+    window.addEventListener('exitSlopeMode', () => {
       this.drawingService.setDrawingMode('idle');
     });
   }
@@ -141,7 +154,38 @@ export class ToolbarComponent {
   
   public toggleSnapToAngle(): void {
     this.snapToAngle = !this.snapToAngle;
+    // Wenn 30° aktiviert wird, deaktiviere andere
+    if (this.snapToAngle) {
+      this.snapTo15Angle = false;
+      this.snapTo45Angle = false;
+      this.lineDrawingService.setSnapTo15Angle(false);
+      this.lineDrawingService.setSnapTo45Angle(false);
+    }
     this.lineDrawingService.setSnapToAngle(this.snapToAngle);
+  }
+  
+  public toggleSnapTo15Angle(): void {
+    this.snapTo15Angle = !this.snapTo15Angle;
+    // Wenn 15° aktiviert wird, deaktiviere andere
+    if (this.snapTo15Angle) {
+      this.snapToAngle = false;
+      this.snapTo45Angle = false;
+      this.lineDrawingService.setSnapToAngle(false);
+      this.lineDrawingService.setSnapTo45Angle(false);
+    }
+    this.lineDrawingService.setSnapTo15Angle(this.snapTo15Angle);
+  }
+  
+  public toggleSnapTo45Angle(): void {
+    this.snapTo45Angle = !this.snapTo45Angle;
+    // Wenn 45° aktiviert wird, deaktiviere andere
+    if (this.snapTo45Angle) {
+      this.snapToAngle = false;
+      this.snapTo15Angle = false;
+      this.lineDrawingService.setSnapToAngle(false);
+      this.lineDrawingService.setSnapTo15Angle(false);
+    }
+    this.lineDrawingService.setSnapTo45Angle(this.snapTo45Angle);
   }
   
   public toggleWelding(): void {
@@ -190,6 +234,10 @@ export class ToolbarComponent {
 
   public startFlow(): void {
     this.drawingService.setDrawingMode('flow');
+  }
+  
+  public startSlope(): void {
+    this.drawingService.setDrawingMode('slope');
   }
 
   public toggleValves(): void {
@@ -283,5 +331,99 @@ export class ToolbarComponent {
       this.drawingService.setDrawingMode('idle');
     }
     this.drawingService.setDrawingMode('ballValveFL');
+  }
+
+  // New UI Methods
+  public toggleSidebar(): void {
+    this.sidebarCollapsed = !this.sidebarCollapsed;
+  }
+
+  public toggleSection(section: string): void {
+    if (this.activeSection === section) {
+      this.activeSection = '';
+    } else {
+      this.activeSection = section;
+      // Close other sections
+      if (section === 'welding') {
+        this.showPipingTools = false;
+        this.showValveTools = false;
+      } else if (section === 'piping') {
+        this.showWeldingTools = false;
+      } else if (section === 'isometry') {
+        this.showWeldingTools = false;
+        this.showPipingTools = false;
+        this.showValveTools = false;
+      }
+    }
+  }
+
+  public getCurrentModeLabel(): string {
+    const modeLabels: { [key: string]: string } = {
+      'idle': 'Bereit',
+      'addLine': 'Linie zeichnen',
+      'addPipe': 'Rohrleitung zeichnen',
+      'text': 'Text hinzufügen',
+      'dimension': 'Bemaßung',
+      'addAnchors': 'Ankerpunkte setzen',
+      'weldstamp': 'Schweißstempel',
+      'welderstamp': 'Schweißer Stempel',
+      'welderstampempty': 'Schweißer leer',
+      'welderstampas': 'Schweißer AS',
+      'weld': 'Schweißnaht',
+      'fluidstamp': 'Flansch Stempel',
+      'spool': 'Spool',
+      'flow': 'Fließrichtung',
+      'gateValveS': 'Gate Ventil S',
+      'gateValveFL': 'Gate Ventil FL',
+      'globeValveS': 'Globe Ventil S',
+      'globeValveFL': 'Globe Ventil FL',
+      'ballValveS': 'Ball Ventil S',
+      'ballValveFL': 'Ball Ventil FL',
+      'slope': 'Gefälle markieren'
+    };
+    return modeLabels[this.drawingService.drawingMode] || this.drawingService.drawingMode;
+  }
+
+  public getContextualHelp(): string {
+    const helpTexts: { [key: string]: string } = {
+      'addLine': 'Klicken Sie für Startpunkt, dann für Endpunkt. Shift = 15° Snap, Strg = Ankerpunkt-Snap',
+      'addPipe': 'Klicken Sie für Punkte entlang der Rohrleitung. Doppelklick oder ESC zum Beenden',
+      'text': 'Klicken Sie auf die Position für den Text',
+      'dimension': 'Wählen Sie zwei Ankerpunkte, dann die Position für die Bemaßung',
+      'addAnchors': 'Klicken Sie um Ankerpunkte zu setzen. Shift = Snap zu Linien',
+      'weldstamp': 'Klicken Sie auf zwei Punkte für die Schweißnaht-Position',
+      'welderstamp': 'Klicken Sie auf zwei Punkte für den Schweißer-Stempel',
+      'welderstampempty': 'Klicken Sie auf zwei Punkte für den leeren Schweißer-Stempel',
+      'welderstampas': 'Klicken Sie auf zwei Punkte für den AS Schweißer-Stempel',
+      'weld': 'Klicken Sie auf zwei Punkte für die Schweißnaht',
+      'fluidstamp': 'Klicken Sie auf zwei Punkte für den Flansch-Stempel',
+      'spool': 'Klicken Sie auf die Position für die Spool-Nummer',
+      'flow': 'Klicken Sie auf Start- und Endpunkt für die Fließrichtung',
+      'gateValveS': 'Klicken Sie auf zwei Punkte für das Gate Ventil (S)',
+      'gateValveFL': 'Klicken Sie auf zwei Punkte für das Gate Ventil (FL)',
+      'globeValveS': 'Klicken Sie auf zwei Punkte für das Globe Ventil (S)',
+      'globeValveFL': 'Klicken Sie auf zwei Punkte für das Globe Ventil (FL)',
+      'ballValveS': 'Klicken Sie auf zwei Punkte für das Ball Ventil (S)',
+      'ballValveFL': 'Klicken Sie auf zwei Punkte für das Ball Ventil (FL)',
+      'slope': 'Bewegen Sie über eine Linie. Strg = Richtung ändern, Shift = Seite wechseln'
+    };
+    return helpTexts[this.drawingService.drawingMode] || 'Wählen Sie ein Werkzeug aus der Seitenleiste';
+  }
+
+  public showHelp(): void {
+    alert('Hilfe:\n\nTastenkombinationen:\n' +
+          '- ESC: Aktuellen Modus beenden\n' +
+          '- Shift: 15° Snap beim Zeichnen\n' +
+          '- Strg: Snap zu Ankerpunkten\n\n' +
+          'Weitere Hilfe finden Sie in der Dokumentation.');
+  }
+
+  public showSettings(): void {
+    alert('Einstellungen:\n\nDiese Funktion wird in einer zukünftigen Version verfügbar sein.');
+  }
+  
+  public setColorMode(mode: 'drawing' | 'blackwhite' | 'norm'): void {
+    this.colorMode = mode;
+    this.drawingService.setColorMode(mode);
   }
 }

@@ -489,7 +489,7 @@ export class WeldingService {
           this.canvas.add(this.weldPreview);
           
           // Highlight the line if snapping to line
-          if (nearest.isLine && nearest.object) {
+          if ((nearest as any).isLine && nearest.object) {
             // Store original properties before highlighting
             if (!(nearest.object as any)._originalStroke) {
               (nearest.object as any)._originalStroke = nearest.object.get('stroke');

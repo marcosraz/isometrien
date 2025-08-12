@@ -1,112 +1,313 @@
-<div class="toolbar">
-  <div class="toolbar-row">
-    <button (click)="addLine()" 
-            class="btn btn-primary"
-            [class.active]="drawingService.drawingMode === 'addLine'">Add Line</button>
-    <button (click)="startPiping()" 
-            class="btn btn-secondary"
-            [class.active]="drawingService.drawingMode === 'addPipe'">Add Pipe</button>
-    <button (click)="addText()" 
-            class="btn btn-info"
-            [class.active]="drawingService.drawingMode === 'text'">Add Text</button>
-    <button (click)="setDimensionMode()" 
-            class="btn btn-warning"
-            [class.active]="drawingService.drawingMode === 'dimension'">Dimension</button>
-    <button (click)="toggleSnapToAngle()" 
-            class="btn"
-            [class.btn-success]="snapToAngle"
-            [class.btn-outline-secondary]="!snapToAngle">
-      30° Snap {{ snapToAngle ? 'ON' : 'OFF' }}
+<!-- Sidebar Navigation -->
+<nav class="sidebar" [class.collapsed]="sidebarCollapsed">
+  <div class="sidebar-header">
+    <img src="assets/Logo.png" alt="Zauner Logo" class="sidebar-logo" *ngIf="!sidebarCollapsed">
+    <button class="sidebar-toggle" (click)="toggleSidebar()" 
+            [attr.title]="sidebarCollapsed ? 'Menü erweitern' : 'Menü einklappen'">
+      <span class="icon">{{ sidebarCollapsed ? '→' : '←' }}</span>
     </button>
-    <button (click)="groupSelectedObjects()" class="btn btn-dark">Group</button>
-    <button (click)="ungroupObjects()" class="btn btn-dark">Ungroup</button>
-    <button (click)="addAnchors()" 
-            class="btn btn-light"
-            [class.active]="drawingService.drawingMode === 'addAnchors'">Anchors</button>
-    <button (click)="applyDimension()" class="btn btn-light">Apply Dim</button>
   </div>
   
-  <div class="toolbar-row">
-    <button (click)="toggleWelding()" 
-            class="btn btn-danger"
-            [class.active]="showWeldingTools">Welding</button>
-    
-    <div class="welding-tools" *ngIf="showWeldingTools">
-      <button (click)="startWeldstamp()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'weldstamp'">Weldstamp</button>
-      <button (click)="startWelderStamp()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'welderstamp'">Welder Stamp</button>
-      <button (click)="startWelderStampEmpty()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'welderstampempty'">Welder Stamp empty</button>
-      <button (click)="startWelderStampAS()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'welderstampas'">Welder Stamp AS</button>
-      <button (click)="startWeld()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'weld'">Weld</button>
-      <button (click)="startFluidStamp()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'fluidstamp'">Flange Stamp</button>
-      <button (click)="startSpool()" 
-              class="btn btn-outline-danger"
-              [class.active]="drawingService.drawingMode === 'spool'">Spool</button>
-    </div>
-    
-    <button (click)="togglePiping()" 
-            class="btn btn-info"
-            [class.active]="showPipingTools">Piping</button>
-    
-    <div class="piping-tools" *ngIf="showPipingTools">
-      <button (click)="startFlow()" 
-              class="btn btn-outline-info"
-              [class.active]="drawingService.drawingMode === 'flow'">Flow</button>
-      
-      <button (click)="toggleValves()" 
-              class="btn btn-outline-info"
-              [class.active]="showValveTools">Valves</button>
-      
-      <div class="valve-tools" *ngIf="showValveTools" style="margin-left: 10px; display: inline-block;">
-        <button (click)="toggleGateValve()" 
-                class="btn btn-sm btn-outline-info"
-                [class.active]="showGateValveTools">Gate</button>
-        <button (click)="toggleGlobeValve()" 
-                class="btn btn-sm btn-outline-info"
-                [class.active]="showGlobeValveTools">Globe</button>
-        <button (click)="toggleBallValve()" 
-                class="btn btn-sm btn-outline-info"
-                [class.active]="showBallValveTools">Ball</button>
-        <button class="btn btn-sm btn-outline-info" disabled>Check</button>
-        
-        <div class="gate-valve-tools" *ngIf="showGateValveTools" style="margin-left: 5px; display: inline-block;">
-          <button (click)="startGateValveS()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'gateValveS'">S</button>
-          <button (click)="startGateValveFL()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'gateValveFL'">FL</button>
-        </div>
-        
-        <div class="globe-valve-tools" *ngIf="showGlobeValveTools" style="margin-left: 5px; display: inline-block;">
-          <button (click)="startGlobeValveS()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'globeValveS'">S</button>
-          <button (click)="startGlobeValveFL()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'globeValveFL'">FL</button>
-        </div>
-        
-        <div class="ball-valve-tools" *ngIf="showBallValveTools" style="margin-left: 5px; display: inline-block;">
-          <button (click)="startBallValveS()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'ballValveS'">S</button>
-          <button (click)="startBallValveFL()" 
-                  class="btn btn-sm btn-outline-secondary"
-                  [class.active]="drawingService.drawingMode === 'ballValveFL'">FL</button>
-        </div>
+  <div class="sidebar-content">
+    <!-- Drawing Tools Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('drawing')" 
+           [class.active]="activeSection === 'drawing'">
+        <span class="icon">✏️</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Zeichnen</span>
       </div>
     </div>
+
+    <!-- Measurement Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('measurement')"
+           [class.active]="activeSection === 'measurement'">
+        <span class="icon">📐</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Bemaßung</span>
+      </div>
+    </div>
+
+    <!-- Welding Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('welding')"
+           [class.active]="activeSection === 'welding'">
+        <span class="icon">⚡</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Schweißen</span>
+      </div>
+    </div>
+
+    <!-- Piping & Valves Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('piping')"
+           [class.active]="activeSection === 'piping'">
+        <span class="icon">🚰</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Rohrleitungen</span>
+      </div>
+    </div>
+
+    <!-- Isometry Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('isometry')"
+           [class.active]="activeSection === 'isometry'">
+        <span class="icon">📐</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Isometrien</span>
+      </div>
+    </div>
+
+    <!-- Object Management Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('objects')"
+           [class.active]="activeSection === 'objects'">
+        <span class="icon">📦</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Objekte</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Actions -->
+  <div class="sidebar-footer" *ngIf="!sidebarCollapsed">
+    <div class="snap-controls">
+      <label class="snap-label">Snap-Optionen</label>
+      <div class="snap-buttons">
+        <button class="snap-btn" 
+                (click)="toggleSnapTo15Angle()" 
+                [class.active]="snapTo15Angle"
+                title="15° Raster">
+          15°
+        </button>
+        <button class="snap-btn" 
+                (click)="toggleSnapToAngle()" 
+                [class.active]="snapToAngle"
+                title="30° Raster">
+          30°
+        </button>
+        <button class="snap-btn" 
+                (click)="toggleSnapTo45Angle()" 
+                [class.active]="snapTo45Angle"
+                title="45° Raster">
+          45°
+        </button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="color-controls">
+      <label class="color-label">Farbmodus</label>
+      <div class="color-buttons">
+        <button class="color-btn" 
+                (click)="setColorMode('drawing')" 
+                [class.active]="colorMode === 'drawing'"
+                title="Zeichnen Modus">
+          Zeichnen
+        </button>
+        <button class="color-btn" 
+                (click)="setColorMode('blackwhite')" 
+                [class.active]="colorMode === 'blackwhite'"
+                title="Schwarz-Weiß Modus">
+          S/W
+        </button>
+        <button class="color-btn" 
+                (click)="setColorMode('norm')" 
+                [class.active]="colorMode === 'norm'"
+                title="DIN ISO Norm">
+          Norm
+        </button>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <button class="footer-btn" (click)="showHelp()" title="Hilfe">
+      <span>❓ Hilfe</span>
+    </button>
+    <button class="footer-btn" (click)="showSettings()" title="Einstellungen">
+      <span>⚙️ Einstellungen</span>
+    </button>
+  </div>
+</nav>
+
+<!-- Top Context Bar -->
+<div class="top-context-bar" [class.collapsed]="sidebarCollapsed">
+  <!-- Drawing Tools -->
+  <div class="context-section" *ngIf="activeSection === 'drawing'">
+    <button class="context-btn" (click)="addLine()" 
+            [class.active]="drawingService.drawingMode === 'addLine'"
+            title="Linie zeichnen">
+      <span class="icon">📏</span>
+      <span class="label">Linie</span>
+    </button>
+    <button class="context-btn" (click)="startPiping()" 
+            [class.active]="drawingService.drawingMode === 'addPipe'"
+            title="Rohrleitung zeichnen">
+      <span class="icon">🔧</span>
+      <span class="label">Rohrleitung</span>
+    </button>
+    <button class="context-btn" (click)="addText()" 
+            [class.active]="drawingService.drawingMode === 'text'"
+            title="Text hinzufügen">
+      <span class="icon">📝</span>
+      <span class="label">Text</span>
+    </button>
+    <button class="context-btn" (click)="addAnchors()" 
+            [class.active]="drawingService.drawingMode === 'addAnchors'"
+            title="Ankerpunkte setzen">
+      <span class="icon">📍</span>
+      <span class="label">Ankerpunkte</span>
+    </button>
+  </div>
+
+  <!-- Measurement Tools -->
+  <div class="context-section" *ngIf="activeSection === 'measurement'">
+    <button class="context-btn" (click)="setDimensionMode()" 
+            [class.active]="drawingService.drawingMode === 'dimension'"
+            title="Bemaßung hinzufügen">
+      <span class="icon">📏</span>
+      <span class="label">Dimension</span>
+    </button>
+    <button class="context-btn" (click)="applyDimension()"
+            title="Bemaßung anwenden">
+      <span class="icon">✅</span>
+      <span class="label">Anwenden</span>
+    </button>
+  </div>
+
+  <!-- Welding Tools -->
+  <div class="context-section" *ngIf="activeSection === 'welding'">
+    <button class="context-btn" (click)="startWeldstamp()" 
+            [class.active]="drawingService.drawingMode === 'weldstamp'"
+            title="Schweißstempel">
+      <span class="icon">🔴</span>
+      <span class="label">Schweißstempel</span>
+    </button>
+    <button class="context-btn" (click)="startWelderStamp()" 
+            [class.active]="drawingService.drawingMode === 'welderstamp'"
+            title="Schweißer Stempel">
+      <span class="icon">👷</span>
+      <span class="label">Schweißer</span>
+    </button>
+    <button class="context-btn" (click)="startWelderStampEmpty()" 
+            [class.active]="drawingService.drawingMode === 'welderstampempty'"
+            title="Schweißer Stempel leer">
+      <span class="icon">⭕</span>
+      <span class="label">Schweißer leer</span>
+    </button>
+    <button class="context-btn" (click)="startWelderStampAS()" 
+            [class.active]="drawingService.drawingMode === 'welderstampas'"
+            title="Schweißer Stempel AS">
+      <span class="icon">🔵</span>
+      <span class="label">Schweißer AS</span>
+    </button>
+    <button class="context-btn" (click)="startWeld()" 
+            [class.active]="drawingService.drawingMode === 'weld'"
+            title="Schweißnaht">
+      <span class="icon">✖️</span>
+      <span class="label">Schweißnaht</span>
+    </button>
+    <button class="context-btn" (click)="startFluidStamp()" 
+            [class.active]="drawingService.drawingMode === 'fluidstamp'"
+            title="Flansch Stempel">
+      <span class="icon">⬡</span>
+      <span class="label">Flansch</span>
+    </button>
+    <button class="context-btn" (click)="startSpool()" 
+            [class.active]="drawingService.drawingMode === 'spool'"
+            title="Spool">
+      <span class="icon">🔄</span>
+      <span class="label">Spool</span>
+    </button>
+  </div>
+
+  <!-- Piping Tools -->
+  <div class="context-section" *ngIf="activeSection === 'piping'">
+    <button class="context-btn" (click)="startPiping()" 
+            [class.active]="drawingService.drawingMode === 'addPipe'"
+            title="Rohrleitung zeichnen">
+      <span class="icon">🔧</span>
+      <span class="label">Rohrleitung</span>
+    </button>
+    <button class="context-btn" (click)="startFlow()" 
+            [class.active]="drawingService.drawingMode === 'flow'"
+            title="Fließrichtung">
+      <span class="icon">➡️</span>
+      <span class="label">Fließrichtung</span>
+    </button>
+    
+    <div class="separator"></div>
+    
+    <!-- Valve Options -->
+    <div class="valve-group">
+      <span class="group-label">Ventile:</span>
+      <button class="valve-btn" (click)="toggleGateValve()"
+              [class.active]="showGateValveTools">
+        Gate
+      </button>
+      <button class="valve-btn" (click)="toggleGlobeValve()"
+              [class.active]="showGlobeValveTools">
+        Globe
+      </button>
+      <button class="valve-btn" (click)="toggleBallValve()"
+              [class.active]="showBallValveTools">
+        Ball
+      </button>
+    </div>
+
+    <!-- Gate Valve Options -->
+    <div class="valve-options" *ngIf="showGateValveTools">
+      <span class="option-label">Gate:</span>
+      <button class="option-btn" (click)="startGateValveS()" 
+              [class.active]="drawingService.drawingMode === 'gateValveS'">S</button>
+      <button class="option-btn" (click)="startGateValveFL()" 
+              [class.active]="drawingService.drawingMode === 'gateValveFL'">FL</button>
+    </div>
+
+    <!-- Globe Valve Options -->
+    <div class="valve-options" *ngIf="showGlobeValveTools">
+      <span class="option-label">Globe:</span>
+      <button class="option-btn" (click)="startGlobeValveS()" 
+              [class.active]="drawingService.drawingMode === 'globeValveS'">S</button>
+      <button class="option-btn" (click)="startGlobeValveFL()" 
+              [class.active]="drawingService.drawingMode === 'globeValveFL'">FL</button>
+    </div>
+
+    <!-- Ball Valve Options -->
+    <div class="valve-options" *ngIf="showBallValveTools">
+      <span class="option-label">Ball:</span>
+      <button class="option-btn" (click)="startBallValveS()" 
+              [class.active]="drawingService.drawingMode === 'ballValveS'">S</button>
+      <button class="option-btn" (click)="startBallValveFL()" 
+              [class.active]="drawingService.drawingMode === 'ballValveFL'">FL</button>
+    </div>
+  </div>
+
+  <!-- Isometry Tools -->
+  <div class="context-section" *ngIf="activeSection === 'isometry'">
+    <button class="context-btn" (click)="startSlope()"
+            [class.active]="drawingService.drawingMode === 'slope'"
+            title="Gefälle markieren">
+      <span class="icon">🔻</span>
+      <span class="label">Gefälle</span>
+    </button>
+  </div>
+
+  <!-- Object Management Tools -->
+  <div class="context-section" *ngIf="activeSection === 'objects'">
+    <button class="context-btn" (click)="groupSelectedObjects()"
+            title="Objekte gruppieren">
+      <span class="icon">🔗</span>
+      <span class="label">Gruppieren</span>
+    </button>
+    <button class="context-btn" (click)="ungroupObjects()"
+            title="Gruppierung aufheben">
+      <span class="icon">🔓</span>
+      <span class="label">Aufheben</span>
+    </button>
+  </div>
+
+  <!-- Status Info -->
+  <div class="status-info">
+    <span class="status-label">Modus:</span>
+    <span class="current-mode" [class.active]="drawingService.drawingMode !== 'idle'">
+      {{ getCurrentModeLabel() }}
+    </span>
+    <span class="help-text" *ngIf="drawingService.drawingMode !== 'idle'">
+      | {{ getContextualHelp() }}
+    </span>
   </div>
 </div>

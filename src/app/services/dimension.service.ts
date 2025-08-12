@@ -57,7 +57,7 @@ export class DimensionService {
         if (anchor.fill === 'green' || anchor.fill === 'orange') {
           anchor.set({
             fill: (anchor as any).originalFill || 'red',
-            radius: 5,
+            radius: 2,
             strokeWidth: 1,
             stroke: 'black'
           });
@@ -232,7 +232,7 @@ export class DimensionService {
         const prev = this.hoveredAnchor as fabric.Circle;
         prev.set({
           fill: (prev as any).originalFill || 'red',
-          radius: 5,
+          radius: 2,
           strokeWidth: 1,
           stroke: 'black'
         });
@@ -245,7 +245,7 @@ export class DimensionService {
           (anchor as any).originalFill = anchor.fill;
           anchor.set({
             fill: 'green',
-            radius: 7,
+            radius: 3,
             strokeWidth: 3,
             stroke: 'darkgreen'
           });
@@ -260,7 +260,7 @@ export class DimensionService {
         if (first.fill !== 'orange') {
           first.set({
             fill: 'orange',
-            radius: 7,
+            radius: 3,
             strokeWidth: 3,
             stroke: 'darkorange'
           });
@@ -624,7 +624,7 @@ export class DimensionService {
     const controlButton = new fabric.Circle({
       left: buttonX,
       top: buttonY,
-      radius: 8,
+      radius: 3,
       originX: 'center',
       originY: 'center',
       fill: '#ff0000',
@@ -831,7 +831,7 @@ export class DimensionService {
       controlButton.set({
         fill: '#ff6666',
         strokeWidth: 3,
-        radius: 12
+        radius: 6
       });
       dimensionData.dimensionLine.set({
         stroke: '#ff0000',
@@ -844,7 +844,7 @@ export class DimensionService {
       controlButton.set({
         fill: '#ff0000',
         strokeWidth: 2,
-        radius: 10
+        radius: 5
       });
       dimensionData.dimensionLine.set({
         stroke: 'black',
@@ -1029,7 +1029,7 @@ export class DimensionService {
     const offsetControl = new fabric.Circle({
       left: midPoint.x + dimensionData.offset * Math.cos(perpendicularAngle),
       top: midPoint.y + dimensionData.offset * Math.sin(perpendicularAngle),
-      radius: 5,
+      radius: 2,
       fill: 'transparent',
       stroke: 'blue',
       strokeWidth: 1,

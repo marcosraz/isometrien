@@ -7,6 +7,7 @@ import { ObjectManagementService } from './object-management.service';
 import { WeldingService } from './welding.service';
 import { StateManagementService } from './state-management.service';
 import { PipingService } from './piping.service';
+import { IsometryToolsService } from './isometry-tools.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -16,6 +17,41 @@ export class DrawingService {
   private redrawRequest = new BehaviorSubject<void>(undefined);
   redraw$ = this.redrawRequest.asObservable();
   private canvas!: fabric.Canvas;
+  
+  // Color mode management
+  public colorMode: 'drawing' | 'blackwhite' | 'norm' = 'drawing';
+  
+  // Color schemes for different modes
+  private colorSchemes = {
+    drawing: {
+      line: 'black',
+      pipe: 'green',
+      dimension: 'blue',
+      text: 'black',
+      weld: 'red',
+      anchor: 'rgba(128, 128, 128, 0.5)',
+      valve: '#2563eb'
+    },
+    blackwhite: {
+      line: 'black',
+      pipe: 'black',
+      dimension: 'black',
+      text: 'black',
+      weld: 'black',
+      anchor: 'rgba(0, 0, 0, 0.5)',
+      valve: 'black'
+    },
+    norm: {
+      // DIN ISO 6412-2 standard colors for isometric piping
+      line: '#000000',      // Black for general lines
+      pipe: '#00A050',      // Green for process pipes
+      dimension: '#0000FF', // Blue for dimensions
+      text: '#000000',      // Black for text
+      weld: '#FF0000',      // Red for welds
+      anchor: 'rgba(128, 128, 128, 0.3)',
+      valve: '#800080'      // Purple for valves
+    }
+  };
 
   constructor(
     private isometryService: IsometryService,
@@ -24,7 +60,8 @@ export class DrawingService {
     private objectManagementService: ObjectManagementService,
     private weldingService: WeldingService,
     private stateManagementService: StateManagementService,
-    private pipingService: PipingService
+    private pipingService: PipingService,
+    private isometryToolsService: IsometryToolsService
   ) {
     // Connect state management to services
     this.lineDrawingService.setStateManagement(this.stateManagementService);
@@ -32,6 +69,11 @@ export class DrawingService {
     this.weldingService.setStateManagement(this.stateManagementService);
     this.objectManagementService.setStateManagement(this.stateManagementService);
     this.pipingService.setStateManagement(this.stateManagementService);
+    this.isometryToolsService.setStateManagement(this.stateManagementService);
+    
+    // Connect drawing service for color management
+    this.lineDrawingService.setDrawingService(this);
+    this.isometryToolsService.setDrawingService(this);
   }
 
   public setCanvas(canvas: fabric.Canvas): void {
@@ -39,6 +81,7 @@ export class DrawingService {
     this.lineDrawingService.setCanvas(canvas);
     this.weldingService.setCanvas(canvas);
     this.pipingService.setCanvas(canvas);
+    this.isometryToolsService.setCanvas(canvas);
   }
 
   public requestRedraw(): void {
@@ -88,7 +131,7 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope'
   ): void {
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
@@ -141,6 +184,9 @@ export class DrawingService {
     } else if (mode === 'ballValveFL') {
       this.lineDrawingService.setDrawingMode('idle');
       this.pipingService.startBallValveFLMode();
+    } else if (mode === 'slope') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.isometryToolsService.startSlopeMode();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -157,6 +203,7 @@ export class DrawingService {
       this.pipingService.stopGlobeValveFLMode();
       this.pipingService.stopBallValveSMode();
       this.pipingService.stopBallValveFLMode();
+      this.isometryToolsService.stopSlopeMode();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -169,6 +216,11 @@ export class DrawingService {
 
     if (this.pipingService.isActive()) {
       this.pipingService.handleMouseDown(options);
+      return;
+    }
+    
+    if (this.isometryToolsService.isSlopeModeActive()) {
+      this.isometryToolsService.handleMouseDown(this.canvas, options);
       return;
     }
 
@@ -206,6 +258,11 @@ export class DrawingService {
       this.pipingService.handleMouseMove(options);
       return;
     }
+    
+    if (this.isometryToolsService.isSlopeModeActive()) {
+      this.isometryToolsService.handleMouseMove(this.canvas, options);
+      return;
+    }
 
     const drawingMode = this.lineDrawingService.drawingMode;
 
@@ -222,16 +279,35 @@ export class DrawingService {
   public handleDoubleClick(options: fabric.TEvent<MouseEvent>): void {
     this.lineDrawingService.handlePipeDoubleClick(this.canvas, options);
     
-    // Prüfe, ob ein Bemaßungstext doppelgeklickt wurde
+    // Prüfe, ob ein Bemaßungstext oder Gefälle-Text doppelgeklickt wurde
     const target = (options as any).target;
     if (target) {
-      // Prüfe direkt auf Bemaßungstext
-      if (target.type === 'i-text' && (target as any).customType === 'dimensionText') {
+      // Prüfe direkt auf Bemaßungstext oder Gefälle-Text
+      if (target.type === 'i-text' && ((target as any).customType === 'dimensionText' || (target as any).customType === 'slopeText')) {
         const textObject = target as fabric.IText;
         // Aktiviere den Text zum Bearbeiten
         this.canvas.setActiveObject(textObject);
         textObject.enterEditing();
         textObject.selectAll();
+      }
+      // Prüfe auch Gruppen für Gefälle-Marker - Bearbeite Text direkt ohne Entgruppierung
+      else if (target.type === 'group' && (target as any).customType === 'slopeMarker') {
+        // Zeige Dialog zum Bearbeiten des Gefälle-Werts
+        const currentValue = (target as any).slopeData?.percent || '0.50';
+        const newValue = prompt('Gefälle in % ändern:', currentValue);
+        
+        if (newValue !== null && newValue !== currentValue) {
+          // Aktualisiere den Text in der Gruppe
+          const group = target as fabric.Group;
+          const objects = group.getObjects();
+          const textObj = objects.find((obj: any) => obj.type === 'i-text' && obj.customType === 'slopeText');
+          
+          if (textObj) {
+            (textObj as fabric.IText).set('text', `Gefälle ${newValue}%`);
+            (target as any).slopeData.percent = newValue;
+            this.canvas.requestRenderAll();
+          }
+        }
       }
     }
   }
@@ -276,7 +352,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
@@ -305,10 +381,13 @@ export class DrawingService {
     if (this.pipingService.isBallValveFLModeActive()) {
       return 'ballValveFL';
     }
+    if (this.isometryToolsService.isSlopeModeActive()) {
+      return 'slope';
+    }
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
@@ -351,6 +430,9 @@ export class DrawingService {
     } else if (mode === 'ballValveFL') {
       this.lineDrawingService.setDrawingMode('idle');
       this.pipingService.startBallValveFLMode();
+    } else if (mode === 'slope') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.isometryToolsService.startSlopeMode();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -366,6 +448,7 @@ export class DrawingService {
       this.pipingService.stopGlobeValveFLMode();
       this.pipingService.stopBallValveSMode();
       this.pipingService.stopBallValveFLMode();
+      this.isometryToolsService.stopSlopeMode();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -377,5 +460,138 @@ export class DrawingService {
 
   public set pipePoints(points: { x: number; y: number }[]) {
     this.lineDrawingService['pipePoints'] = points;
+  }
+  
+  // Color mode methods
+  public setColorMode(mode: 'drawing' | 'blackwhite' | 'norm'): void {
+    console.log('Setting color mode to:', mode);
+    this.colorMode = mode;
+    this.updateCanvasColors();
+  }
+  
+  public getColor(element: 'line' | 'pipe' | 'dimension' | 'text' | 'weld' | 'anchor' | 'valve'): string {
+    return this.colorSchemes[this.colorMode][element];
+  }
+  
+  private updateCanvasColors(): void {
+    if (!this.canvas) return;
+    
+    const objects = this.canvas.getObjects();
+    objects.forEach(obj => {
+      // Update line colors
+      if (obj instanceof fabric.Line) {
+        // Store original type if not already stored
+        if ((obj as any).isPipe === undefined && obj.stroke === 'green') {
+          (obj as any).isPipe = true;
+        }
+        
+        if ((obj as any).isPipe) {
+          obj.set('stroke', this.getColor('pipe'));
+        } else if ((obj as any).isDimensionPart) {
+          obj.set('stroke', this.getColor('dimension'));
+        } else {
+          obj.set('stroke', this.getColor('line'));
+        }
+      }
+      // Update path colors (for pipes)
+      else if (obj instanceof fabric.Path) {
+        if ((obj as any).isPipe || obj.stroke === 'green' || obj.stroke === '#00A050' || obj.stroke === 'black') {
+          // Always update pipe colors based on current mode
+          if ((obj as any).isPipe !== false) {  // Check if it's a pipe
+            obj.set('stroke', this.getColor('pipe'));
+          }
+        }
+      }
+      // Update circle colors (anchors)
+      else if (obj instanceof fabric.Circle) {
+        if ((obj as any).customType === 'anchorPoint') {
+          // Store original colors if not already stored
+          if (!(obj as any).originalFill) {
+            (obj as any).originalFill = obj.fill;
+            (obj as any).originalStroke = obj.stroke;
+          }
+          
+          // Check original colors to determine point type
+          const origFill = (obj as any).originalFill;
+          const origStroke = (obj as any).originalStroke;
+          
+          if (origFill === 'blue' || origStroke === 'blue' || origStroke === 'darkblue' || 
+              (typeof origFill === 'string' && origFill.includes('rgba(0, 0, 255')) ||
+              (typeof origStroke === 'string' && origStroke.includes('rgba(0, 0, 139'))) {
+            // Blue anchor points
+            if (this.colorMode === 'blackwhite') {
+              obj.set({
+                'fill': 'black',
+                'stroke': 'black'
+              });
+            } else if (this.colorMode === 'norm') {
+              obj.set({
+                'fill': '#0000FF',
+                'stroke': '#00008B'
+              });
+            } else {
+              // Drawing mode - restore original transparent blue
+              if (typeof origFill === 'string' && origFill.includes('rgba')) {
+                obj.set({
+                  'fill': 'rgba(0, 0, 255, 0.2)',
+                  'stroke': 'rgba(0, 0, 139, 0.4)'
+                });
+              } else {
+                obj.set({
+                  'fill': 'blue',
+                  'stroke': 'darkblue'
+                });
+              }
+            }
+          } else if (origFill === 'red' || origStroke === 'red' || origStroke === 'darkred') {
+            // Red anchor points
+            if (this.colorMode === 'blackwhite') {
+              obj.set({
+                'fill': 'black',
+                'stroke': 'black'
+              });
+            } else {
+              // Restore original red colors
+              obj.set({
+                'fill': origFill || 'red',
+                'stroke': origStroke || 'darkred'
+              });
+            }
+          } else if (origFill === 'transparent' || !origFill) {
+            // Transparent anchor points
+            obj.set({
+              'fill': 'transparent',
+              'stroke': this.getColor('anchor')
+            });
+          }
+        }
+      }
+      // Update text colors
+      else if (obj instanceof fabric.IText || obj instanceof fabric.Text) {
+        if (!(obj as any).isDimensionPart) {
+          obj.set('fill', this.getColor('text'));
+        } else {
+          obj.set('fill', this.getColor('dimension'));
+        }
+      }
+      // Update group colors
+      else if (obj instanceof fabric.Group) {
+        if ((obj as any).isWeldPoint || (obj as any).customType?.includes('weld')) {
+          obj.getObjects().forEach((subObj: any) => {
+            if (subObj.type === 'line') {
+              subObj.set('stroke', this.getColor('weld'));
+            }
+          });
+        } else if ((obj as any).customType?.includes('valve')) {
+          obj.getObjects().forEach((subObj: any) => {
+            if (subObj.type === 'line' || subObj.type === 'path') {
+              subObj.set('stroke', this.getColor('valve'));
+            }
+          });
+        }
+      }
+    });
+    
+    this.canvas.requestRenderAll();
   }
 }
