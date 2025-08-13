@@ -21,7 +21,8 @@
       "Bash(dir:*)",
       "Bash(mkdir:*)",
       "Bash(git init:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }
