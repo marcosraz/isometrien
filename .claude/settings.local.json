@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c:*)",
+      "Bash(git add:*)",
+      "Bash(del nul)",
+      "Bash(rm:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(npm start)",
+      "Bash(git restore:*)",
+      "Bash(npm start:*)",
+      "Bash(copy:*)",
+      "Bash(cp:*)",
+      "Bash(xcopy:*)",
+      "Bash(powershell Copy-Item:*)",
+      "Bash(dir:*)",
+      "Bash(mkdir:*)",
+      "Bash(git init:*)",
+      "Bash(git rm:*)"
+    ],
+    "deny": []
+  }
+}
