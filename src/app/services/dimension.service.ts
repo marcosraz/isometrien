@@ -817,8 +817,8 @@ export class DimensionService {
       hasControls: false,
       hasBorders: false,
       angle: textAngle,
-      backgroundColor: 'white', // Weißer Hintergrund für bessere Lesbarkeit
-      padding: 2,
+      // backgroundColor: 'white', // Weißer Hintergrund entfernt
+      // padding: 2,
     });
 
     // Speichere Dimensionsdaten mit offset und Orientierung für spätere Updates
@@ -1047,8 +1047,8 @@ export class DimensionService {
       originX: 'center',
       originY: 'center',
       angle: textAngle,
-      backgroundColor: 'rgba(255, 255, 255, 0.8)',
-      padding: 2,
+      // backgroundColor: 'rgba(255, 255, 255, 0.8)', // Weißer Hintergrund entfernt
+      // padding: 2,
     });
     elements.push(text);
     
@@ -1195,8 +1195,8 @@ export class DimensionService {
       originX: 'center',
       originY: 'center',
       angle: textAngle,
-      backgroundColor: 'rgba(255, 255, 255, 0.8)',
-      padding: 2,
+      // backgroundColor: 'rgba(255, 255, 255, 0.8)', // Weißer Hintergrund entfernt
+      // padding: 2,
     });
     elements.push(text);
     
