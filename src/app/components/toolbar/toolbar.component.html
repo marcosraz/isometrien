@@ -156,10 +156,16 @@
   <!-- Measurement Tools -->
   <div class="context-section" *ngIf="activeSection === 'measurement'">
     <button class="context-btn" (click)="setDimensionMode()" 
-            [class.active]="drawingService.drawingMode === 'dimension'"
+            [class.active]="drawingService.drawingMode === 'dimension' && !drawingService.dimensionService?.isoDimensionMode"
             title="Bemaßung hinzufügen">
       <span class="icon">📏</span>
       <span class="label">Dimension</span>
+    </button>
+    <button class="context-btn" (click)="setIsoDimensionMode()" 
+            [class.active]="drawingService.drawingMode === 'dimension' && drawingService.dimensionService?.isoDimensionMode"
+            title="ISO-Bemaßung (TAB für Ausrichtung)">
+      <span class="icon">📐</span>
+      <span class="label">ISO-Dimension</span>
     </button>
     <button class="context-btn" (click)="applyDimension()"
             title="Bemaßung anwenden">

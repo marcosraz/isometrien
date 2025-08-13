@@ -206,13 +206,13 @@ export class LineDrawingService {
         }
       }
       
-      // Erstelle einen transparenten Ankerpunkt
+      // Erstelle einen blauen Ankerpunkt (einzeln gesetzt)
       const anchor = new fabric.Circle({
-        radius: 2,
-        fill: 'transparent',
-        stroke: this.getColor('anchor'),
+        radius: 2,  // Gleiche Größe wie andere Ankerpunkte
+        fill: 'blue',
+        stroke: 'darkblue',
         strokeWidth: 1,
-        opacity: 0.3,  // Sehr transparent
+        opacity: 1,  // Voll sichtbar
         left: anchorPos.x,
         top: anchorPos.y,
         originX: 'center',
@@ -220,6 +220,8 @@ export class LineDrawingService {
         selectable: true,
         evented: true,
         customType: 'anchorPoint',
+        isAnchor: true,  // Markiere als Ankerpunkt für Snapping
+        visible: true,
       });
       canvas.add(anchor);
       canvas.requestRenderAll();
@@ -378,16 +380,12 @@ export class LineDrawingService {
     if (this.drawingMode === 'addPipe') {
       let clickPoint = { x: pointer.x, y: pointer.y };
       
-      // Check for anchor snapping with Ctrl key
-      if (this.isCtrlPressed) {
-        const nearestAnchor = this.findNearestAnchor(pointer, canvas);
-        if (nearestAnchor) {
-          clickPoint = nearestAnchor;
-        }
-      }
-      
-      // Apply angle snapping if enabled (Shift key or toggle)
-      if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && this.pipePoints.length > 0 && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+      // Always check for anchor snapping first (automatic snapping)
+      const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+      if (nearestAnchor) {
+        clickPoint = nearestAnchor;
+      } else if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && this.pipePoints.length > 0) {
+        // Apply angle snapping only if no anchor was found
         const lastPoint = this.pipePoints[this.pipePoints.length - 1];
         clickPoint = this.snapToAngle(lastPoint, clickPoint);
       }
@@ -395,13 +393,19 @@ export class LineDrawingService {
       // Füge den Punkt hinzu
       this.pipePoints.push(clickPoint);
 
-      // Erstelle einen Ankerpunkt
-      const anchor = new fabric.Circle({
-        radius: 2,
+      // Erstelle einen Ankerpunkt (nur wenn noch keiner existiert)
+      const existingAnchor = canvas.getObjects().find((obj: any) => 
+        obj.customType === 'anchorPoint' && 
+        Math.abs(obj.left - clickPoint.x) < 1 && 
+        Math.abs(obj.top - clickPoint.y) < 1
+      );
+      
+      const anchor: fabric.Circle = existingAnchor as fabric.Circle || new fabric.Circle({
+        radius: 2,  // Kleine Größe für Hauptankerpunkte
         fill: 'transparent',
         stroke: this.getColor('anchor'),
         strokeWidth: 1,
-        opacity: 0.3,  // Sehr transparent
+        opacity: 0.5,  // Halbtransparent
         left: clickPoint.x,
         top: clickPoint.y,
         selectable: true,
@@ -409,10 +413,14 @@ export class LineDrawingService {
         originX: 'center',
         originY: 'center',
         customType: 'anchorPoint',
+        isAnchor: true,
         visible: true,
       });
-      this.pipeAnchors.push(anchor);
-      // Ankerpunkt später hinzufügen, damit er über den Linien ist
+      this.pipeAnchors.push(anchor as fabric.Circle);
+      // Nur neue Ankerpunkte hinzufügen
+      if (!existingAnchor) {
+        canvas.add(anchor);
+      }
 
       // Entferne die Vorschau
       if (this.previewPipe) {
@@ -480,7 +488,7 @@ export class LineDrawingService {
         
         // Erstelle Ankerpunkte für den Bogen
         const arcStartAnchor = new fabric.Circle({
-          radius: 2, // Normale Größe für blaue Punkte
+          radius: 2, // Kleine blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -491,11 +499,12 @@ export class LineDrawingService {
           originX: 'center',
           originY: 'center',
           customType: 'anchorPoint', // WICHTIG für Bemaßung
+          isAnchor: true,  // Markiere als Ankerpunkt für Snapping
           visible: true,
         });
         
         const arcEndAnchor = new fabric.Circle({
-          radius: 2, // Normale Größe für blaue Punkte
+          radius: 2, // Kleine blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -506,6 +515,7 @@ export class LineDrawingService {
           originX: 'center',
           originY: 'center',
           customType: 'anchorPoint', // WICHTIG für Bemaßung
+          isAnchor: true,  // Markiere als Ankerpunkt für Snapping
           visible: true,
         });
         
@@ -586,11 +596,11 @@ export class LineDrawingService {
       
       // Erstelle Vorschau
       this.anchorPreview = new fabric.Circle({
-        radius: 2,
-        fill: 'transparent',
-        stroke: this.getColor('anchor'),
+        radius: 2,  // Gleiche Größe wie andere Ankerpunkte
+        fill: 'blue',
+        stroke: 'darkblue',
         strokeWidth: 1,
-        opacity: 0.3,  // Sehr transparent
+        opacity: 0.7,  // Gut sichtbar
         left: previewPos.x,
         top: previewPos.y,
         originX: 'center',
@@ -662,19 +672,15 @@ export class LineDrawingService {
       let endPoint = { x: pointer.x, y: pointer.y };
       let strokeColor = this.getColor('pipe');
       
-      // Check for anchor snapping with Ctrl key
-      if (this.isCtrlPressed) {
-        const nearestAnchor = this.findNearestAnchor(pointer, canvas);
-        if (nearestAnchor) {
-          endPoint = nearestAnchor;
-          strokeColor = this.getColor('pipe');
-          // Highlight the anchor
-          this.highlightAnchor(nearestAnchor.object!);
-        }
-      }
-      
-      // Apply angle snapping if enabled (Shift key or toggle)
-      if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled) && !(this.isCtrlPressed && this.findNearestAnchor(pointer, canvas))) {
+      // Always check for anchor snapping first (automatic snapping)
+      const nearestAnchor = this.findNearestAnchor(pointer, canvas);
+      if (nearestAnchor) {
+        endPoint = nearestAnchor;
+        strokeColor = this.getColor('pipe');
+        // Highlight the anchor
+        this.highlightAnchor(nearestAnchor.object!);
+      } else if ((this.isShiftPressed || this.snapEnabled || this.snap15Enabled || this.snap45Enabled)) {
+        // Apply angle snapping only if no anchor was found
         endPoint = this.snapToAngle(lastPoint, endPoint);
       }
       
@@ -939,7 +945,7 @@ export class LineDrawingService {
         
         // Erstelle neue blaue Ankerpunkte
         const arcStartAnchor = new fabric.Circle({
-          radius: 2, // Normale Größe für blaue Punkte
+          radius: 2, // Kleine blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -950,11 +956,12 @@ export class LineDrawingService {
           originX: 'center',
           originY: 'center',
           customType: 'anchorPoint',
+          isAnchor: true,  // Markiere als Ankerpunkt für Snapping
           visible: true,
         });
         
         const arcEndAnchor = new fabric.Circle({
-          radius: 2, // Normale Größe für blaue Punkte
+          radius: 2, // Kleine blaue Punkte
           fill: 'blue',
           stroke: 'darkblue',
           strokeWidth: 1,
@@ -965,6 +972,7 @@ export class LineDrawingService {
           originX: 'center',
           originY: 'center',
           customType: 'anchorPoint',
+          isAnchor: true,  // Markiere als Ankerpunkt für Snapping
           visible: true,
         });
         

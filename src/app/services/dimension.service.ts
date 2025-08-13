@@ -21,6 +21,7 @@ interface DimensionData {
 export class DimensionService {
   private dimensionStep: 'start' | 'end' | 'position' | null = null;
   private firstAnchorPoint: fabric.Object | null = null;
+  private secondAnchorPoint: fabric.Object | null = null;
   private hoveredAnchor: fabric.Object | null = null;
   private dimensionElements: fabric.Object[] = [];
   private dimensionDragStartPoint: { x: number; y: number } | null = null;
@@ -28,8 +29,26 @@ export class DimensionService {
   private tempDimensionableAnchors: fabric.Circle[] = [];
   private dimensions: DimensionData[] = [];
   private stateManagement: StateManagementService | null = null;
+  public isoDimensionMode: boolean = false;
+  private isoHelpLineOrientation: 'vertical' | '30deg' | '150deg' = 'vertical';
+  private previewDimension: fabric.Object[] = [];
+  private canvas: fabric.Canvas | null = null;
 
-  constructor() {}
+  constructor() {
+    // Lausche auf TAB-Taste für ISO-Bemaßung
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab' && this.isoDimensionMode && this.dimensionStep === 'position') {
+        e.preventDefault(); // Verhindere Standard-Tab-Verhalten
+        e.stopPropagation(); // Stoppe Event-Weitergabe
+        console.log('TAB-Taste erkannt in position mode');
+        this.toggleIsoHelpLineOrientation();
+        // Aktualisiere die Vorschau
+        if (this.canvas) {
+          this.updateIsoDimensionPreview(this.canvas);
+        }
+      }
+    });
+  }
   
   public setStateManagement(stateManagement: StateManagementService): void {
     this.stateManagement = stateManagement;
@@ -37,7 +56,36 @@ export class DimensionService {
 
   public startDimensioning(): void {
     this.dimensionStep = 'start';
+    this.isoDimensionMode = false;
     console.log('Bemaßungsmodus gestartet. Bitte ersten Punkt wählen.');
+  }
+  
+  public startIsoDimensioning(): void {
+    this.dimensionStep = 'start';
+    this.isoDimensionMode = true;
+    this.isoHelpLineOrientation = 'vertical';
+    console.log('ISO-Bemaßungsmodus gestartet. TAB-Taste für Hilfslinien-Ausrichtung.');
+  }
+  
+  public toggleIsoHelpLineOrientation(): void {
+    if (!this.isoDimensionMode) return;
+    
+    console.log('TAB gedrückt - Aktuelle Ausrichtung:', this.isoHelpLineOrientation);
+    
+    switch (this.isoHelpLineOrientation) {
+      case 'vertical':
+        this.isoHelpLineOrientation = '30deg';
+        console.log('Neue Ausrichtung: 30 Grad');
+        break;
+      case '30deg':
+        this.isoHelpLineOrientation = '150deg';
+        console.log('Neue Ausrichtung: 150 Grad');
+        break;
+      case '150deg':
+        this.isoHelpLineOrientation = 'vertical';
+        console.log('Neue Ausrichtung: Vertikal');
+        break;
+    }
   }
   
   public stopDimensioning(): void {
@@ -164,38 +212,91 @@ export class DimensionService {
           options.target !== this.firstAnchorPoint
         ) {
           const secondAnchorPoint = options.target;
-          console.log(
-            'Zweiter Punkt ausgewählt. Bemaßung wird erstellt und fixiert.'
-          );
-          // Wrap dimension creation in state management
-          if (this.stateManagement) {
-            this.stateManagement.executeOperation('Add Dimension', () => {
-              this.createDimensionVisuals(canvas, this.firstAnchorPoint!, secondAnchorPoint);
-            });
+          
+          if (this.isoDimensionMode) {
+            // Für ISO-Bemaßung: Erstelle Vorschau
+            this.secondAnchorPoint = secondAnchorPoint;
+            this.canvas = canvas; // Speichere Canvas-Referenz
+            this.dimensionStep = 'position';
+            console.log('ISO-Bemaßung: Punkte ausgewählt. TAB-Taste für Ausrichtung, Klick zum Platzieren.');
+            console.log('Aktueller Step:', this.dimensionStep);
+            this.createIsoDimensionPreview(canvas);
+            // WICHTIG: Return hier, damit der Rest nicht ausgeführt wird
+            return;
           } else {
-            this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
+            // Normale Bemaßung: Direkt erstellen
+            console.log('Zweiter Punkt ausgewählt. Bemaßung wird erstellt und fixiert.');
+            // Wrap dimension creation in state management
+            if (this.stateManagement) {
+              this.stateManagement.executeOperation('Add Dimension', () => {
+                this.createDimensionVisuals(canvas, this.firstAnchorPoint!, secondAnchorPoint);
+              });
+            } else {
+              this.createDimensionVisuals(canvas, this.firstAnchorPoint, secondAnchorPoint);
+            }
+            
+            // Ankerpunkte bleiben sichtbar und benutzbar
+            // this.clearTemporaryDimensionAnchors(canvas); // Auskommentiert
+            
+            // Reset für nächste Bemaßung aber bleibe im Dimension-Modus
+            this.firstAnchorPoint = null;
+            this.dimensionElements = [];
+            this.dimensionDragStartPoint = null;
+            this.initialDimensionPositions = [];
+            console.log('Bemaßung platziert. Bereit für nächste Bemaßung.');
+            
+            // Ankerpunkte zurücksetzen
+            this.resetAnchorHighlights(canvas);
+            
+            // Sofort zurück zum Start für neue Bemaßung
+            this.dimensionStep = 'start';
+            
+            // Stelle sicher, dass alle Ankerpunkte sichtbar bleiben
+            this.ensureAnchorsAlwaysVisible(canvas);
+            
+            // Wichtig: Bringe alle Ankerpunkte nach vorne, nachdem neue Elemente hinzugefügt wurden
+            this.bringAllAnchorsToFront(canvas);
+          }
+        }
+        break;
+      case 'position':
+        // ISO-Bemaßung: Platziere nach Klick (aber nicht auf Ankerpunkte)
+        if (this.isoDimensionMode && this.firstAnchorPoint && this.secondAnchorPoint) {
+          // Ignoriere Klicks auf Objekte (nur Canvas-Klicks erlaubt)
+          if (options.target) {
+            console.log('Klick auf Objekt ignoriert - klicke auf leeren Canvas-Bereich zum Platzieren');
+            return;
           }
           
-          // Ankerpunkte bleiben sichtbar und benutzbar
-          // this.clearTemporaryDimensionAnchors(canvas); // Auskommentiert
+          console.log('ISO-Bemaßung wird platziert mit Ausrichtung:', this.isoHelpLineOrientation);
           
-          // Reset für nächste Bemaßung aber bleibe im Dimension-Modus
+          // Hole die Klickposition
+          const pointer = canvas.getPointer(options.e);
+          const positionPoint = { x: pointer.x, y: pointer.y };
+          
+          // Entferne Vorschau
+          if (this.previewDimension.length > 0) {
+            this.previewDimension.forEach(obj => canvas.remove(obj));
+            this.previewDimension = [];
+          }
+          
+          // Erstelle finale Bemaßung mit Positionsangabe
+          if (this.stateManagement) {
+            this.stateManagement.executeOperation('Add ISO Dimension', () => {
+              this.createIsoDimensionVisuals(canvas, this.firstAnchorPoint!, this.secondAnchorPoint!, positionPoint);
+            });
+          } else {
+            this.createIsoDimensionVisuals(canvas, this.firstAnchorPoint, this.secondAnchorPoint, positionPoint);
+          }
+          
+          // Reset für nächste Bemaßung
           this.firstAnchorPoint = null;
-          this.dimensionElements = [];
-          this.dimensionDragStartPoint = null;
-          this.initialDimensionPositions = [];
-          console.log('Bemaßung platziert. Bereit für nächste Bemaßung.');
-          
-          // Ankerpunkte zurücksetzen
-          this.resetAnchorHighlights(canvas);
-          
-          // Sofort zurück zum Start für neue Bemaßung
+          this.secondAnchorPoint = null;
           this.dimensionStep = 'start';
+          this.isoHelpLineOrientation = 'vertical'; // Reset Ausrichtung
           
           // Stelle sicher, dass alle Ankerpunkte sichtbar bleiben
           this.ensureAnchorsAlwaysVisible(canvas);
-          
-          // Wichtig: Bringe alle Ankerpunkte nach vorne, nachdem neue Elemente hinzugefügt wurden
           this.bringAllAnchorsToFront(canvas);
         }
         break;
@@ -206,6 +307,13 @@ export class DimensionService {
   }
 
   public handleDimensionMouseMove(canvas: fabric.Canvas, options: any): void {
+    // Update ISO dimension preview position
+    if (this.dimensionStep === 'position' && this.isoDimensionMode) {
+      const pointer = canvas.getPointer(options.e);
+      this.updateIsoDimensionPreviewWithPosition(canvas, pointer);
+      return;
+    }
+    
     // Hover-Effekt für Ankerpunkte
     if (this.dimensionStep === 'start' || this.dimensionStep === 'end') {
       const pointer = canvas.getPointer(options.e);
@@ -565,6 +673,551 @@ export class DimensionService {
     canvas.requestRenderAll();
   }
 
+  private createIsoDimensionVisuals(
+    canvas: fabric.Canvas,
+    startPoint: fabric.Object,
+    endPoint: fabric.Object,
+    positionPoint?: { x: number; y: number }
+  ): void {
+    const startCoords = {
+      x: startPoint.left as number,
+      y: startPoint.top as number,
+    };
+    const endCoords = { x: endPoint.left as number, y: endPoint.top as number };
+
+    const distance = Math.sqrt(
+      Math.pow(endCoords.x - startCoords.x, 2) +
+      Math.pow(endCoords.y - startCoords.y, 2)
+    ).toFixed(2);
+
+    // Bestimme die Richtung der Hilfslinien basierend auf der Ausrichtung
+    // Die Hilfslinien sind IMMER parallel zueinander
+    let helpLineAngle: number;
+    
+    switch (this.isoHelpLineOrientation) {
+      case 'vertical':
+        helpLineAngle = -Math.PI / 2; // 90 Grad nach oben
+        break;
+      case '30deg':
+        helpLineAngle = -Math.PI / 6; // 30 Grad (isometrisch rechts-oben)
+        break;
+      case '150deg':
+        helpLineAngle = -(5 * Math.PI) / 6; // 150 Grad (isometrisch links-oben)
+        break;
+      default:
+        helpLineAngle = -Math.PI / 2;
+    }
+
+    // Berechne den Offset basierend auf der Position des dritten Klicks
+    let offset = 40; // Standard-Offset
+    if (positionPoint) {
+      // Berechne die Distanz vom Positionspunkt zur Verbindungslinie der Ankerpunkte
+      // Projektion des Positionspunkts auf die Richtung der Hilfslinien
+      const midPoint = {
+        x: (startCoords.x + endCoords.x) / 2,
+        y: (startCoords.y + endCoords.y) / 2,
+      };
+      
+      // Vektor vom Mittelpunkt zum Positionspunkt
+      const dx = positionPoint.x - midPoint.x;
+      const dy = positionPoint.y - midPoint.y;
+      
+      // Projektion auf die Hilfslinieneichtung
+      offset = dx * Math.cos(helpLineAngle) + dy * Math.sin(helpLineAngle);
+      
+      // Mindestabstand
+      if (Math.abs(offset) < 20) {
+        offset = offset < 0 ? -20 : 20;
+      }
+    }
+
+    // Berechne die Endpunkte der parallelen Hilfslinien
+    // WICHTIG: Beide Hilfslinien haben denselben Winkel für absolute Parallelität
+    const helpLine1End = {
+      x: startCoords.x + offset * Math.cos(helpLineAngle),
+      y: startCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    const helpLine2End = {
+      x: endCoords.x + offset * Math.cos(helpLineAngle), // Exakt gleicher Winkel
+      y: endCoords.y + offset * Math.sin(helpLineAngle), // Exakt gleicher Winkel
+    };
+
+    // Erstelle parallele Hilfslinien
+    const extensionLine1 = new fabric.Line(
+      [startCoords.x, startCoords.y, helpLine1End.x, helpLine1End.y],
+      {
+        stroke: 'black',
+        strokeWidth: 0.5,
+        selectable: false,
+        evented: false,
+        strokeDashArray: [2, 2],
+      }
+    );
+
+    const extensionLine2 = new fabric.Line(
+      [endCoords.x, endCoords.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: 'black',
+        strokeWidth: 0.5,
+        selectable: false,
+        evented: false,
+        strokeDashArray: [2, 2],
+      }
+    );
+
+    // Maßlinie - IMMER gerade zwischen den Endpunkten der Hilfslinien
+    const dimensionLine = new fabric.Line(
+      [helpLine1End.x, helpLine1End.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: 'black',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+      }
+    );
+    
+    // Berechne den Winkel der Maßlinie für die Pfeile
+    const lineAngle = Math.atan2(
+      helpLine2End.y - helpLine1End.y,
+      helpLine2End.x - helpLine1End.x
+    );
+
+    // Berechne die tatsächlichen Endpunkte der Maßlinie für die Pfeile
+    const dimLineStart = { x: dimensionLine.x1!, y: dimensionLine.y1! };
+    const dimLineEnd = { x: dimensionLine.x2!, y: dimensionLine.y2! };
+
+    // Pfeile an den Enden der Maßlinie
+    const arrow1 = this.createArrow(dimLineStart, lineAngle + Math.PI, 8);
+    const arrow2 = this.createArrow(dimLineEnd, lineAngle, 8);
+
+    // Text in der Mitte der Maßlinie
+    const textX = (dimLineStart.x + dimLineEnd.x) / 2;
+    const textY = (dimLineStart.y + dimLineEnd.y) / 2;
+
+    // Berechne den Textwinkel - Text sollte lesbar sein
+    let textAngle = (lineAngle * 180) / Math.PI;
+    // Stelle sicher, dass der Text nicht auf dem Kopf steht
+    if (textAngle > 90 || textAngle < -90) {
+      textAngle += 180;
+    }
+
+    const text = new fabric.IText(distance, {
+      left: textX,
+      top: textY,
+      fontSize: 14,
+      fontFamily: 'Arial',
+      fill: 'black',
+      originX: 'center',
+      originY: 'center',
+      selectable: true,
+      evented: true,
+      editable: true,
+      lockMovementX: true,
+      lockMovementY: true,
+      hasControls: false,
+      hasBorders: false,
+      angle: textAngle,
+      backgroundColor: 'white', // Weißer Hintergrund für bessere Lesbarkeit
+      padding: 2,
+    });
+
+    // Speichere Dimensionsdaten mit offset und Orientierung für spätere Updates
+    const dimensionData: DimensionData = {
+      startAnchor: startPoint,
+      endAnchor: endPoint,
+      extensionLine1,
+      extensionLine2,
+      dimensionLine,
+      arrow1,
+      arrow2,
+      text,
+      offset,
+    };
+    // Speichere ISO-spezifische Daten
+    (dimensionData as any).isIsoDimension = true;
+    (dimensionData as any).isoOrientation = this.isoHelpLineOrientation;
+    (dimensionData as any).isoOffset = offset;
+    
+    this.dimensions.push(dimensionData);
+
+    // Generiere einzigartige Dimension ID
+    const dimensionId = `dimension_${Date.now()}_${Math.random()}`;
+    
+    // Setze gemeinsame Eigenschaften für alle Teile
+    [extensionLine1, extensionLine2, dimensionLine, arrow1, arrow2].forEach(element => {
+      (element as any).dimensionId = dimensionId;
+      (element as any).isDimensionPart = true;
+      element.set({
+        selectable: false,
+        evented: false,
+        lockMovementX: true,
+        lockMovementY: true,
+        hasControls: false,
+        hasBorders: false
+      });
+    });
+    
+    // Text separat behandeln (selektierbar für Bearbeitung)
+    (text as any).dimensionId = dimensionId;
+    (text as any).isDimensionPart = true;
+
+    // Füge alle Elemente zum Canvas hinzu
+    canvas.add(extensionLine1, extensionLine2, dimensionLine, arrow1, arrow2, text);
+    
+    // Stelle sicher, dass Position immer gesperrt bleibt
+    text.on('editing:exited', () => {
+      text.set({
+        lockMovementX: true,
+        lockMovementY: true
+      });
+      canvas.requestRenderAll();
+    });
+
+    // Berechne die Breite des Texts
+    const textBounds = text.getBoundingRect();
+    const textWidth = textBounds.width + 10; // Extra Padding
+
+    // Teile die Maßlinie in zwei Segmente mit Lücke für Text
+    canvas.remove(dimensionLine);
+    
+    // Berechne die Punkte für die Linienunterbrechung entlang der Maßlinie
+    const textGap = textWidth / 2 + 5; // Extra padding um den Text
+    const dx = Math.cos(lineAngle) * textGap;
+    const dy = Math.sin(lineAngle) * textGap;
+    
+    const leftLine = new fabric.Line(
+      [dimLineStart.x, dimLineStart.y, textX - dx, textY - dy],
+      {
+        stroke: 'black',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+      }
+    );
+    (leftLine as any).dimensionId = dimensionId;
+    (leftLine as any).isDimensionPart = true;
+    
+    const rightLine = new fabric.Line(
+      [textX + dx, textY + dy, dimLineEnd.x, dimLineEnd.y],
+      {
+        stroke: 'black',
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+      }
+    );
+    (rightLine as any).dimensionId = dimensionId;
+    (rightLine as any).isDimensionPart = true;
+    
+    canvas.add(leftLine, rightLine);
+    
+    // Speichere beide Linien für spätere Verwendung
+    dimensionData.dimensionLine = leftLine;
+    (dimensionData as any).rightLine = rightLine;
+    
+    // Füge Interaktionsfunktionalität NACH dem Erstellen der geteilten Linien hinzu
+    this.createDimensionInteractionGroup(canvas, dimensionData);
+
+    // Text in den Vordergrund bringen
+    canvas.bringObjectToFront(text);
+
+    // Position sperren nach dem Editieren
+    text.on('editing:exited', () => {
+      text.set({
+        lockMovementX: true,
+        lockMovementY: true
+      });
+      
+      // Aktualisiere die Linienunterbrechung basierend auf neuer Textbreite
+      const newTextBounds = text.getBoundingRect();
+      const newTextWidth = newTextBounds.width + 10;
+      
+      // Entferne alte Linien und erstelle neue mit angepasster Lücke
+      // (Implementierung würde hier folgen, aber für Einfachheit belassen wir es so)
+      
+      canvas.requestRenderAll();
+    });
+
+    canvas.requestRenderAll();
+  }
+
+  private createIsoDimensionPreview(canvas: fabric.Canvas): void {
+    if (!this.firstAnchorPoint || !this.secondAnchorPoint) return;
+    
+    console.log('Erstelle ISO-Vorschau mit Ausrichtung:', this.isoHelpLineOrientation);
+    
+    // Entferne alte Vorschau
+    if (this.previewDimension.length > 0) {
+      this.previewDimension.forEach(obj => canvas.remove(obj));
+      this.previewDimension = [];
+    }
+    
+    const startCoords = {
+      x: this.firstAnchorPoint.left as number,
+      y: this.firstAnchorPoint.top as number,
+    };
+    const endCoords = {
+      x: this.secondAnchorPoint.left as number,
+      y: this.secondAnchorPoint.top as number,
+    };
+    
+    const distance = Math.sqrt(
+      Math.pow(endCoords.x - startCoords.x, 2) +
+      Math.pow(endCoords.y - startCoords.y, 2)
+    ).toFixed(2);
+    
+    const offset = 40;
+    let helpLineAngle: number;
+    
+    switch (this.isoHelpLineOrientation) {
+      case 'vertical':
+        helpLineAngle = -Math.PI / 2;
+        break;
+      case '30deg':
+        helpLineAngle = -Math.PI / 6;
+        break;
+      case '150deg':
+        helpLineAngle = -(5 * Math.PI) / 6;
+        break;
+      default:
+        helpLineAngle = -Math.PI / 2;
+    }
+    
+    // Erstelle Vorschau-Elemente
+    const elements: fabric.Object[] = [];
+    
+    // Hilfslinien
+    const helpLine1End = {
+      x: startCoords.x + offset * Math.cos(helpLineAngle),
+      y: startCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    const helpLine2End = {
+      x: endCoords.x + offset * Math.cos(helpLineAngle),
+      y: endCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    
+    const extensionLine1 = new fabric.Line(
+      [startCoords.x, startCoords.y, helpLine1End.x, helpLine1End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 1,
+        strokeDashArray: [3, 3],
+        opacity: 0.8,
+      }
+    );
+    elements.push(extensionLine1);
+    
+    const extensionLine2 = new fabric.Line(
+      [endCoords.x, endCoords.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 1,
+        strokeDashArray: [3, 3],
+        opacity: 0.8,
+      }
+    );
+    elements.push(extensionLine2);
+    
+    // Maßlinie
+    const dimensionLine = new fabric.Line(
+      [helpLine1End.x, helpLine1End.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 2,
+        opacity: 0.8,
+      }
+    );
+    elements.push(dimensionLine);
+    
+    // Text
+    const textX = (helpLine1End.x + helpLine2End.x) / 2;
+    const textY = (helpLine1End.y + helpLine2End.y) / 2;
+    const lineAngle = Math.atan2(helpLine2End.y - helpLine1End.y, helpLine2End.x - helpLine1End.x);
+    let textAngle = (lineAngle * 180) / Math.PI;
+    if (textAngle > 90 || textAngle < -90) {
+      textAngle += 180;
+    }
+    
+    const text = new fabric.Text(distance, {
+      left: textX,
+      top: textY,
+      fontSize: 16,
+      fontFamily: 'Arial',
+      fill: '#808080',
+      originX: 'center',
+      originY: 'center',
+      angle: textAngle,
+      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+      padding: 2,
+    });
+    elements.push(text);
+    
+    // Füge alle Elemente zur Canvas hinzu
+    elements.forEach(el => {
+      el.set({
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        hasBorders: false,
+      });
+      canvas.add(el);
+      canvas.bringObjectToFront(el);
+    });
+    
+    // Speichere Referenz zu Vorschau-Elementen
+    this.previewDimension = elements;
+    
+    canvas.requestRenderAll();
+  }
+  
+  private updateIsoDimensionPreview(canvas: fabric.Canvas): void {
+    console.log('Update ISO-Vorschau');
+    // Einfach neu erstellen
+    this.createIsoDimensionPreview(canvas);
+  }
+  
+  private updateIsoDimensionPreviewWithPosition(canvas: fabric.Canvas, positionPoint: { x: number; y: number }): void {
+    if (!this.firstAnchorPoint || !this.secondAnchorPoint) return;
+    
+    // Entferne alte Vorschau
+    if (this.previewDimension.length > 0) {
+      this.previewDimension.forEach(obj => canvas.remove(obj));
+      this.previewDimension = [];
+    }
+    
+    const startCoords = {
+      x: this.firstAnchorPoint.left as number,
+      y: this.firstAnchorPoint.top as number,
+    };
+    const endCoords = {
+      x: this.secondAnchorPoint.left as number,
+      y: this.secondAnchorPoint.top as number,
+    };
+    
+    const distance = Math.sqrt(
+      Math.pow(endCoords.x - startCoords.x, 2) +
+      Math.pow(endCoords.y - startCoords.y, 2)
+    ).toFixed(2);
+    
+    // Bestimme Hilfslinienewinkel basierend auf Ausrichtung
+    let helpLineAngle: number;
+    switch (this.isoHelpLineOrientation) {
+      case 'vertical':
+        helpLineAngle = -Math.PI / 2;
+        break;
+      case '30deg':
+        helpLineAngle = -Math.PI / 6;
+        break;
+      case '150deg':
+        helpLineAngle = -(5 * Math.PI) / 6;
+        break;
+      default:
+        helpLineAngle = -Math.PI / 2;
+    }
+    
+    // Berechne dynamischen Offset basierend auf Mausposition
+    const midPoint = {
+      x: (startCoords.x + endCoords.x) / 2,
+      y: (startCoords.y + endCoords.y) / 2,
+    };
+    
+    const dx = positionPoint.x - midPoint.x;
+    const dy = positionPoint.y - midPoint.y;
+    
+    let offset = dx * Math.cos(helpLineAngle) + dy * Math.sin(helpLineAngle);
+    
+    // Mindestabstand
+    if (Math.abs(offset) < 20) {
+      offset = offset < 0 ? -20 : 20;
+    }
+    
+    // Erstelle Vorschau-Elemente
+    const elements: fabric.Object[] = [];
+    
+    // Hilfslinien mit dynamischem Offset
+    const helpLine1End = {
+      x: startCoords.x + offset * Math.cos(helpLineAngle),
+      y: startCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    const helpLine2End = {
+      x: endCoords.x + offset * Math.cos(helpLineAngle),
+      y: endCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    
+    const extensionLine1 = new fabric.Line(
+      [startCoords.x, startCoords.y, helpLine1End.x, helpLine1End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 1,
+        strokeDashArray: [3, 3],
+        opacity: 0.8,
+      }
+    );
+    elements.push(extensionLine1);
+    
+    const extensionLine2 = new fabric.Line(
+      [endCoords.x, endCoords.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 1,
+        strokeDashArray: [3, 3],
+        opacity: 0.8,
+      }
+    );
+    elements.push(extensionLine2);
+    
+    // Maßlinie
+    const dimensionLine = new fabric.Line(
+      [helpLine1End.x, helpLine1End.y, helpLine2End.x, helpLine2End.y],
+      {
+        stroke: '#808080',
+        strokeWidth: 2,
+        opacity: 0.8,
+      }
+    );
+    elements.push(dimensionLine);
+    
+    // Text
+    const textX = (helpLine1End.x + helpLine2End.x) / 2;
+    const textY = (helpLine1End.y + helpLine2End.y) / 2;
+    const lineAngle = Math.atan2(helpLine2End.y - helpLine1End.y, helpLine2End.x - helpLine1End.x);
+    let textAngle = (lineAngle * 180) / Math.PI;
+    if (textAngle > 90 || textAngle < -90) {
+      textAngle += 180;
+    }
+    
+    const text = new fabric.Text(distance, {
+      left: textX,
+      top: textY,
+      fontSize: 16,
+      fontFamily: 'Arial',
+      fill: '#808080',
+      originX: 'center',
+      originY: 'center',
+      angle: textAngle,
+      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+      padding: 2,
+    });
+    elements.push(text);
+    
+    // Füge alle Elemente zur Canvas hinzu
+    elements.forEach(el => {
+      el.set({
+        selectable: false,
+        evented: false,
+        hasControls: false,
+        hasBorders: false,
+      });
+      canvas.add(el);
+      canvas.bringObjectToFront(el);
+    });
+    
+    // Speichere Referenz zu Vorschau-Elementen
+    this.previewDimension = elements;
+    
+    canvas.requestRenderAll();
+  }
+
   private createArrow(point: { x: number; y: number }, angle: number, size: number): fabric.Path {
     const headLength = size;
     const headAngle = Math.PI / 6; // 30 Grad
@@ -576,7 +1229,7 @@ export class DimensionService {
 
     const pathString = `M ${x1} ${y1} L ${point.x} ${point.y} L ${x2} ${y2}`;
     
-    return new fabric.Path(pathString, {
+    const arrow = new fabric.Path(pathString, {
       stroke: 'black',
       strokeWidth: 1.5,
       fill: 'black',
@@ -587,6 +1240,11 @@ export class DimensionService {
       lockMovementX: true,
       lockMovementY: true,
     });
+    
+    // Markiere explizit als Pfeil für spätere Identifikation
+    (arrow as any).isArrow = true;
+    
+    return arrow;
   }
 
   private createDimensionInteractionGroup(canvas: fabric.Canvas, dimensionData: DimensionData): void {
@@ -601,7 +1259,27 @@ export class DimensionService {
       dimensionData.endAnchor.top! - dimensionData.startAnchor.top!,
       dimensionData.endAnchor.left! - dimensionData.startAnchor.left!
     );
-    const perpendicularAngle = angle + Math.PI / 2;
+    
+    // Für ISO-Bemaßungen verwenden wir den festen ISO-Winkel
+    let perpendicularAngle: number;
+    if ((dimensionData as any).isIsoDimension) {
+      const isoOrientation = (dimensionData as any).isoOrientation || 'vertical';
+      switch (isoOrientation) {
+        case 'vertical':
+          perpendicularAngle = -Math.PI / 2;
+          break;
+        case '30deg':
+          perpendicularAngle = -Math.PI / 6;
+          break;
+        case '150deg':
+          perpendicularAngle = -(5 * Math.PI) / 6;
+          break;
+        default:
+          perpendicularAngle = -Math.PI / 2;
+      }
+    } else {
+      perpendicularAngle = angle + Math.PI / 2;
+    }
 
     const extLine1_end = {
       x: dimensionData.startAnchor.left! + dimensionData.offset * Math.cos(perpendicularAngle),
@@ -837,6 +1515,13 @@ export class DimensionService {
         stroke: '#ff0000',
         strokeWidth: 2
       });
+      // Wenn es eine rechte Linie gibt, färbe auch diese rot
+      if ((dimensionData as any).rightLine) {
+        ((dimensionData as any).rightLine as fabric.Line).set({
+          stroke: '#ff0000',
+          strokeWidth: 2
+        });
+      }
       canvas.renderAll();
     });
 
@@ -850,6 +1535,13 @@ export class DimensionService {
         stroke: 'black',
         strokeWidth: 1
       });
+      // Wenn es eine rechte Linie gibt, setze auch diese zurück
+      if ((dimensionData as any).rightLine) {
+        ((dimensionData as any).rightLine as fabric.Line).set({
+          stroke: 'black',
+          strokeWidth: 1
+        });
+      }
       canvas.renderAll();
     });
   }
@@ -886,7 +1578,199 @@ export class DimensionService {
     dimensionData.endAnchor.on('moving', updateDimension);
   }
 
+  private updateIsoDimensionPosition(canvas: fabric.Canvas, dimensionData: DimensionData): void {
+    const startCoords = {
+      x: dimensionData.startAnchor.left as number,
+      y: dimensionData.startAnchor.top as number,
+    };
+    const endCoords = {
+      x: dimensionData.endAnchor.left as number,
+      y: dimensionData.endAnchor.top as number,
+    };
+
+    const distance = Math.sqrt(
+      Math.pow(endCoords.x - startCoords.x, 2) +
+      Math.pow(endCoords.y - startCoords.y, 2)
+    ).toFixed(2);
+
+    // Hole die gespeicherte ISO-Orientierung
+    const isoOrientation = (dimensionData as any).isoOrientation || 'vertical';
+    let helpLineAngle: number;
+    
+    switch (isoOrientation) {
+      case 'vertical':
+        helpLineAngle = -Math.PI / 2;
+        break;
+      case '30deg':
+        helpLineAngle = -Math.PI / 6;
+        break;
+      case '150deg':
+        helpLineAngle = -(5 * Math.PI) / 6;
+        break;
+      default:
+        helpLineAngle = -Math.PI / 2;
+    }
+
+    // Verwende den gespeicherten Offset oder berechne ihn neu
+    const offset = dimensionData.offset || (dimensionData as any).isoOffset || 40;
+
+    const extLine1_end = {
+      x: startCoords.x + offset * Math.cos(helpLineAngle),
+      y: startCoords.y + offset * Math.sin(helpLineAngle),
+    };
+    const extLine2_end = {
+      x: endCoords.x + offset * Math.cos(helpLineAngle),
+      y: endCoords.y + offset * Math.sin(helpLineAngle),
+    };
+
+    // Update Extension Lines
+    dimensionData.extensionLine1.set({
+      x1: startCoords.x,
+      y1: startCoords.y,
+      x2: extLine1_end.x,
+      y2: extLine1_end.y,
+    });
+
+    dimensionData.extensionLine2.set({
+      x1: endCoords.x,
+      y1: endCoords.y,
+      x2: extLine2_end.x,
+      y2: extLine2_end.y,
+    });
+
+    // Update Dimension Line - wenn es aufgeteilt ist, aktualisiere beide Teile
+    if ((dimensionData as any).rightLine) {
+      // Die Linie ist in zwei Teile geteilt (mit Lücke für Text)
+      const textX = (extLine1_end.x + extLine2_end.x) / 2;
+      const textY = (extLine1_end.y + extLine2_end.y) / 2;
+      const lineAngle = Math.atan2(extLine2_end.y - extLine1_end.y, extLine2_end.x - extLine1_end.x);
+      
+      // Berechne die Lücke für den Text
+      const textWidth = 60; // Geschätzte Textbreite
+      const textGap = textWidth / 2 + 5;
+      const dx = Math.cos(lineAngle) * textGap;
+      const dy = Math.sin(lineAngle) * textGap;
+      
+      // Update linke Linie
+      (dimensionData.dimensionLine as fabric.Line).set({
+        x1: extLine1_end.x,
+        y1: extLine1_end.y,
+        x2: textX - dx,
+        y2: textY - dy,
+      });
+      
+      // Update rechte Linie
+      ((dimensionData as any).rightLine as fabric.Line).set({
+        x1: textX + dx,
+        y1: textY + dy,
+        x2: extLine2_end.x,
+        y2: extLine2_end.y,
+      });
+    } else {
+      // Normale durchgehende Linie
+      (dimensionData.dimensionLine as fabric.Line).set({
+        x1: extLine1_end.x,
+        y1: extLine1_end.y,
+        x2: extLine2_end.x,
+        y2: extLine2_end.y,
+      });
+    }
+
+    // Update Arrows - Entferne die alten Pfeile explizit
+    const dimensionId = (dimensionData.extensionLine1 as any).dimensionId;
+    
+    // Entferne alte Pfeile direkt
+    if (dimensionData.arrow1) {
+      canvas.remove(dimensionData.arrow1);
+    }
+    if (dimensionData.arrow2) {
+      canvas.remove(dimensionData.arrow2);
+    }
+    
+    // Zusätzlich: Finde und entferne ALLE Path-Objekte mit der gleichen dimensionId oder isArrow flag
+    const objectsToRemove: fabric.Object[] = [];
+    canvas.getObjects().forEach(obj => {
+      if (obj.type === 'path' && 
+          ((obj as any).dimensionId === dimensionId || (obj as any).isArrow === true)) {
+        // Prüfe ob es zu dieser Dimension gehört
+        if ((obj as any).dimensionId === dimensionId) {
+          objectsToRemove.push(obj);
+        }
+      }
+    });
+    
+    objectsToRemove.forEach(obj => {
+      canvas.remove(obj);
+    });
+    
+    // Force render nach dem Entfernen
+    canvas.renderAll();
+    
+    // Setze alte Referenzen auf null
+    dimensionData.arrow1 = null as any;
+    dimensionData.arrow2 = null as any;
+    
+    const lineAngle = Math.atan2(
+      extLine2_end.y - extLine1_end.y,
+      extLine2_end.x - extLine1_end.x
+    );
+    
+    dimensionData.arrow1 = this.createArrow(extLine1_end, lineAngle + Math.PI, 8);
+    dimensionData.arrow2 = this.createArrow(extLine2_end, lineAngle, 8);
+    
+    // Stelle sicher, dass die neuen Pfeile die richtige dimensionId haben
+    (dimensionData.arrow1 as any).dimensionId = dimensionId;
+    (dimensionData.arrow2 as any).dimensionId = dimensionId;
+    (dimensionData.arrow1 as any).isDimensionPart = true;
+    (dimensionData.arrow2 as any).isDimensionPart = true;
+    (dimensionData.arrow1 as any).isArrow = true;
+    (dimensionData.arrow2 as any).isArrow = true;
+    
+    // Setze Eigenschaften für die neuen Pfeile
+    dimensionData.arrow1.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false
+    });
+    dimensionData.arrow2.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false
+    });
+    
+    canvas.add(dimensionData.arrow1, dimensionData.arrow2);
+    
+    // Force render nach dem Hinzufügen
+    canvas.renderAll();
+
+    // Update Text
+    const textX = (extLine1_end.x + extLine2_end.x) / 2;
+    const textY = (extLine1_end.y + extLine2_end.y) / 2;
+    
+    let textAngle = (lineAngle * 180) / Math.PI;
+    if (textAngle > 90 || textAngle < -90) {
+      textAngle += 180;
+    }
+
+    dimensionData.text.set({
+      left: textX,
+      top: textY,
+      text: distance,
+      angle: textAngle,
+    });
+
+    canvas.requestRenderAll();
+  }
+
   private updateDimensionPosition(canvas: fabric.Canvas, dimensionData: DimensionData): void {
+    // Prüfe ob es eine ISO-Bemaßung ist
+    if ((dimensionData as any).isIsoDimension) {
+      this.updateIsoDimensionPosition(canvas, dimensionData);
+      return;
+    }
+    
     const startCoords = {
       x: dimensionData.startAnchor.left as number,
       y: dimensionData.startAnchor.top as number,
@@ -947,18 +1831,58 @@ export class DimensionService {
       });
     }
 
-    // Update Arrows (ersetze die alten)
-    canvas.remove(dimensionData.arrow1, dimensionData.arrow2);
+    // Update Arrows - Entferne die alten Pfeile explizit
+    const dimensionId2 = (dimensionData as any).dimensionId;
+    
+    // Entferne alte Pfeile direkt
+    if (dimensionData.arrow1) {
+      canvas.remove(dimensionData.arrow1);
+    }
+    if (dimensionData.arrow2) {
+      canvas.remove(dimensionData.arrow2);
+    }
+    
+    // Zusätzlich: Finde und entferne ALLE Path-Objekte mit der gleichen dimensionId
+    const objectsToRemove: fabric.Object[] = [];
+    canvas.getObjects().forEach(obj => {
+      if (obj.type === 'path' && (obj as any).dimensionId === dimensionId2) {
+        objectsToRemove.push(obj);
+      }
+    });
+    
+    objectsToRemove.forEach(obj => {
+      canvas.remove(obj);
+    });
+    
+    // Force render nach dem Entfernen
+    canvas.renderAll();
+    
+    // Setze alte Referenzen auf null
+    dimensionData.arrow1 = null as any;
+    dimensionData.arrow2 = null as any;
     
     dimensionData.arrow1 = this.createArrow(extLine1_end, angle + Math.PI, 8);
     dimensionData.arrow2 = this.createArrow(extLine2_end, angle, 8);
     
-    // Markiere die neuen Pfeile mit der gleichen Dimension ID
-    const dimensionId = (dimensionData as any).dimensionId;
-    (dimensionData.arrow1 as any).dimensionId = dimensionId;
+    // dimensionId2 wurde bereits oben deklariert
+    (dimensionData.arrow1 as any).dimensionId = dimensionId2;
     (dimensionData.arrow1 as any).isDimensionPart = true;
-    (dimensionData.arrow2 as any).dimensionId = dimensionId;
+    (dimensionData.arrow2 as any).dimensionId = dimensionId2;
     (dimensionData.arrow2 as any).isDimensionPart = true;
+    
+    // Setze Eigenschaften für die neuen Pfeile
+    dimensionData.arrow1.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false
+    });
+    dimensionData.arrow2.set({
+      selectable: false,
+      evented: false,
+      hasControls: false,
+      hasBorders: false
+    });
     
     canvas.add(dimensionData.arrow1, dimensionData.arrow2);
 

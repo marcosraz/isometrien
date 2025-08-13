@@ -56,7 +56,7 @@ export class DrawingService {
   constructor(
     private isometryService: IsometryService,
     private lineDrawingService: LineDrawingService,
-    private dimensionService: DimensionService,
+    public dimensionService: DimensionService,
     private objectManagementService: ObjectManagementService,
     private weldingService: WeldingService,
     private stateManagementService: StateManagementService,
@@ -114,6 +114,21 @@ export class DrawingService {
   public startDimensioning(): void {
     this.lineDrawingService.setDrawingMode('dimension');
     this.dimensionService.startDimensioning();
+    this.canvas.discardActiveObject();
+    this.canvas.requestRenderAll();
+
+    // Prepare dimensionable anchors from editable pipes and lines
+    const editablePipes = this.lineDrawingService.getEditablePipes();
+    const editableLines = this.lineDrawingService.getEditableLines();
+    this.dimensionService.prepareDimensionableAnchors(this.canvas, editablePipes, editableLines);
+    
+    // Stelle sicher, dass alle Ankerpunkte sichtbar bleiben
+    this.dimensionService.ensureAnchorsAlwaysVisible(this.canvas);
+  }
+  
+  public startIsoDimensioning(): void {
+    this.lineDrawingService.setDrawingMode('dimension');
+    this.dimensionService.startIsoDimensioning();
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
 

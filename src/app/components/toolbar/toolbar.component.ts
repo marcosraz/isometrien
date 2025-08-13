@@ -147,6 +147,10 @@ export class ToolbarComponent {
   public setDimensionMode(): void {
     this.drawingService.startDimensioning();
   }
+  
+  public setIsoDimensionMode(): void {
+    this.drawingService.startIsoDimensioning();
+  }
 
   public addText(): void {
     this.drawingService.startTextMode();
