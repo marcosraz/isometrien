@@ -8,6 +8,7 @@ import { WeldingService } from './welding.service';
 import { StateManagementService } from './state-management.service';
 import { PipingService } from './piping.service';
 import { IsometryToolsService } from './isometry-tools.service';
+import { FreehandDrawingService } from './freehand-drawing.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -61,7 +62,8 @@ export class DrawingService {
     private weldingService: WeldingService,
     private stateManagementService: StateManagementService,
     private pipingService: PipingService,
-    private isometryToolsService: IsometryToolsService
+    private isometryToolsService: IsometryToolsService,
+    public freehandDrawingService: FreehandDrawingService
   ) {
     // Connect state management to services
     this.lineDrawingService.setStateManagement(this.stateManagementService);
@@ -70,6 +72,7 @@ export class DrawingService {
     this.objectManagementService.setStateManagement(this.stateManagementService);
     this.pipingService.setStateManagement(this.stateManagementService);
     this.isometryToolsService.setStateManagement(this.stateManagementService);
+    this.freehandDrawingService.setStateManagement(this.stateManagementService);
     
     // Connect drawing service for color management
     this.lineDrawingService.setDrawingService(this);
@@ -82,6 +85,7 @@ export class DrawingService {
     this.weldingService.setCanvas(canvas);
     this.pipingService.setCanvas(canvas);
     this.isometryToolsService.setCanvas(canvas);
+    this.freehandDrawingService.setCanvas(canvas);
   }
 
   public requestRedraw(): void {
@@ -146,7 +150,7 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'freehand'
   ): void {
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
@@ -202,6 +206,9 @@ export class DrawingService {
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
+    } else if (mode === 'freehand') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.freehandDrawingService.startFreehandDrawing();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -219,6 +226,7 @@ export class DrawingService {
       this.pipingService.stopBallValveSMode();
       this.pipingService.stopBallValveFLMode();
       this.isometryToolsService.stopSlopeMode();
+      this.freehandDrawingService.stopFreehandDrawing();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
@@ -236,6 +244,12 @@ export class DrawingService {
     
     if (this.isometryToolsService.isSlopeModeActive()) {
       this.isometryToolsService.handleMouseDown(this.canvas, options);
+      return;
+    }
+
+    // Check if freehand mode is active
+    if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
+      // Freehand drawing is handled separately by its own service
       return;
     }
 
@@ -276,6 +290,12 @@ export class DrawingService {
     
     if (this.isometryToolsService.isSlopeModeActive()) {
       this.isometryToolsService.handleMouseMove(this.canvas, options);
+      return;
+    }
+
+    // Check if freehand mode is active
+    if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
+      // Freehand drawing is handled separately by its own service
       return;
     }
 
@@ -367,7 +387,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'freehand' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
@@ -399,10 +419,13 @@ export class DrawingService {
     if (this.isometryToolsService.isSlopeModeActive()) {
       return 'slope';
     }
+    if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
+      return 'freehand';
+    }
     return this.lineDrawingService.drawingMode;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'freehand') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
@@ -448,6 +471,9 @@ export class DrawingService {
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
+    } else if (mode === 'freehand') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.freehandDrawingService.startFreehandDrawing();
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -464,11 +490,11 @@ export class DrawingService {
       this.pipingService.stopBallValveSMode();
       this.pipingService.stopBallValveFLMode();
       this.isometryToolsService.stopSlopeMode();
+      this.freehandDrawingService.stopFreehandDrawing();
       this.lineDrawingService.setDrawingMode(mode);
     }
   }
 
-  // Getters for other properties to maintain compatibility
   public get pipePoints(): { x: number; y: number }[] {
     return this.lineDrawingService['pipePoints'];
   }

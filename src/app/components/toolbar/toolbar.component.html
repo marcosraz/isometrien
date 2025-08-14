@@ -127,6 +127,22 @@
 <div class="top-context-bar" [class.collapsed]="sidebarCollapsed">
   <!-- Drawing Tools -->
   <div class="context-section" *ngIf="activeSection === 'drawing'">
+    <button class="context-btn" (click)="startFreehand()" 
+            [class.active]="drawingService.drawingMode === 'freehand'"
+            title="Freihand zeichnen (Strg+Mausrad für Strichstärke, Shift für gerade Linien)">
+      <span class="icon">✏️</span>
+      <span class="label">Zeichnen</span>
+    </button>
+    
+    <!-- Color Picker for Freehand Drawing -->
+    <div class="freehand-controls" *ngIf="drawingService.drawingMode === 'freehand'">
+      <input type="color" 
+             class="color-picker" 
+             [(ngModel)]="freehandColor"
+             (change)="updateFreehandColor()"
+             title="Strichfarbe wählen">
+      <span class="stroke-width-indicator">{{ strokeWidth }}px</span>
+    </div>
     <button class="context-btn" (click)="addLine()" 
             [class.active]="drawingService.drawingMode === 'addLine'"
             title="Linie zeichnen">
@@ -156,13 +172,13 @@
   <!-- Measurement Tools -->
   <div class="context-section" *ngIf="activeSection === 'measurement'">
     <button class="context-btn" (click)="setDimensionMode()" 
-            [class.active]="drawingService.drawingMode === 'dimension' && !drawingService.dimensionService?.isoDimensionMode"
+            [class.active]="drawingService.drawingMode === 'dimension' && !drawingService.dimensionService.isoDimensionMode"
             title="Bemaßung hinzufügen">
       <span class="icon">📏</span>
       <span class="label">Dimension</span>
     </button>
     <button class="context-btn" (click)="setIsoDimensionMode()" 
-            [class.active]="drawingService.drawingMode === 'dimension' && drawingService.dimensionService?.isoDimensionMode"
+            [class.active]="drawingService.drawingMode === 'dimension' && drawingService.dimensionService.isoDimensionMode"
             title="ISO-Bemaßung (TAB für Ausrichtung)">
       <span class="icon">📐</span>
       <span class="label">ISO-Dimension</span>
