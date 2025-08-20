@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { DrawingService } from '../../services/drawing.service';
 import { LineDrawingService } from '../../services/line-drawing.service';
 import { DimensionService } from '../../services/dimension.service';
@@ -10,7 +11,7 @@ import { ExportService } from '../../services/export.service';
 @Component({
   selector: 'app-toolbar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './toolbar.component.html',
   styleUrls: ['./toolbar.component.scss'],
 })
@@ -27,6 +28,8 @@ export class ToolbarComponent {
   public sidebarCollapsed: boolean = false;
   public activeSection: string = 'drawing';
   public colorMode: 'drawing' | 'blackwhite' | 'norm' = 'drawing';
+  public freehandColor: string = '#000000';
+  public strokeWidth: number = 2;
   private escPressCount: number = 0;
   private escResetTimeout: any = null;
   
@@ -128,6 +131,21 @@ export class ToolbarComponent {
     this.drawingService.setDrawingMode('testLine');
   }
 
+  public startFreehand(): void {
+    this.drawingService.setDrawingMode('freehand');
+    // Update stroke width display
+    setInterval(() => {
+      if (this.drawingService.freehandDrawingService) {
+        this.strokeWidth = this.drawingService.freehandDrawingService.getStrokeWidth();
+      }
+    }, 100);
+  }
+
+  public updateFreehandColor(): void {
+    if (this.drawingService.freehandDrawingService) {
+      this.drawingService.freehandDrawingService.setStrokeColor(this.freehandColor);
+    }
+  }
 
   public startPiping(): void {
     this.drawingService.setDrawingMode('addPipe');
