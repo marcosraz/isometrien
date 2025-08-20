@@ -187,9 +187,9 @@ export class DimensionService {
     
     switch (this.dimensionStep) {
       case 'start':
-        // Prüfe zuerst ob eine Linie angeklickt wurde
-        if (options.target && options.target.type === 'line') {
-          console.log('Linie angeklickt für Bemaßung');
+        // Prüfe zuerst ob eine Linie oder ein Pfad (curved pipe) angeklickt wurde
+        if (options.target && (options.target.type === 'line' || options.target.type === 'path')) {
+          console.log('Linie/Pfad angeklickt für Bemaßung');
           this.createDimensionForLine(canvas, options.target as fabric.Line, editablePipes, editableLines);
           return;
         }
@@ -2078,9 +2078,9 @@ export class DimensionService {
     return Math.sqrt(dx * dx + dy * dy);
   }
   
-  // Neue Methode für Bemaßung durch Klick auf Linie
-  private createDimensionForLine(canvas: fabric.Canvas, line: fabric.Line, editablePipes: any[], editableLines: any[]): void {
-    // Finde die Ankerpunkte dieser Linie
+  // Neue Methode für Bemaßung durch Klick auf Linie oder Pfad
+  private createDimensionForLine(canvas: fabric.Canvas, lineOrPath: fabric.Line | fabric.Path, editablePipes: any[], editableLines: any[]): void {
+    // Finde die Ankerpunkte dieser Linie/Pfad
     let startAnchor: fabric.Circle | null = null;
     let endAnchor: fabric.Circle | null = null;
     
@@ -2089,22 +2089,45 @@ export class DimensionService {
       obj.type === 'circle' && (obj as any).customType === 'anchorPoint'
     ) as fabric.Circle[];
     
-    // Finde die nächsten Ankerpunkte zu den Linienenden
+    // Finde die nächsten Ankerpunkte zu den Linien-/Pfadenden
     const tolerance = 10;
+    
+    // Bestimme Start- und Endpunkte basierend auf Objekttyp
+    let startX: number, startY: number, endX: number, endY: number;
+    
+    if (lineOrPath.type === 'line') {
+      const line = lineOrPath as fabric.Line;
+      startX = line.x1!;
+      startY = line.y1!;
+      endX = line.x2!;
+      endY = line.y2!;
+    } else if (lineOrPath.type === 'path') {
+      // Für Pfade, verwende die Bounding Box oder Path-Daten
+      const path = lineOrPath as fabric.Path;
+      const bounds = path.getBoundingRect();
+      // Verwende die linke obere und rechte untere Ecke als Näherung
+      startX = bounds.left;
+      startY = bounds.top;
+      endX = bounds.left + bounds.width;
+      endY = bounds.top + bounds.height;
+    } else {
+      return;
+    }
+    
     allAnchors.forEach(anchor => {
       const anchorX = anchor.left!;
       const anchorY = anchor.top!;
       
-      // Prüfe Abstand zum Linienanfang
+      // Prüfe Abstand zum Start
       const distToStart = Math.sqrt(
-        Math.pow(anchorX - line.x1!, 2) + 
-        Math.pow(anchorY - line.y1!, 2)
+        Math.pow(anchorX - startX, 2) + 
+        Math.pow(anchorY - startY, 2)
       );
       
-      // Prüfe Abstand zum Linienende
+      // Prüfe Abstand zum Ende
       const distToEnd = Math.sqrt(
-        Math.pow(anchorX - line.x2!, 2) + 
-        Math.pow(anchorY - line.y2!, 2)
+        Math.pow(anchorX - endX, 2) + 
+        Math.pow(anchorY - endY, 2)
       );
       
       if (distToStart < tolerance && !startAnchor) {
@@ -2117,18 +2140,29 @@ export class DimensionService {
     
     // Wenn beide Ankerpunkte gefunden wurden, erstelle die Bemaßung
     if (startAnchor && endAnchor) {
-      console.log('Erstelle Bemaßung für Linie zwischen zwei Ankerpunkten');
-      // Wrap dimension creation in state management
-      if (this.stateManagement) {
-        this.stateManagement.executeOperation('Add Dimension', () => {
-          this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
-        });
+      if (this.isoDimensionMode) {
+        // ISO-Modus: Setze die Ankerpunkte und gehe zum Positionierungs-Schritt
+        console.log('ISO-Bemaßung für Linie: Punkte erkannt. TAB-Taste für Ausrichtung, Klick zum Platzieren.');
+        this.firstAnchorPoint = startAnchor as fabric.Object;
+        this.secondAnchorPoint = endAnchor as fabric.Object;
+        this.canvas = canvas;
+        this.dimensionStep = 'position';
+        this.createIsoDimensionPreview(canvas);
       } else {
-        this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
+        // Normale Bemaßung
+        console.log('Erstelle Bemaßung für Linie zwischen zwei Ankerpunkten');
+        // Wrap dimension creation in state management
+        if (this.stateManagement) {
+          this.stateManagement.executeOperation('Add Dimension', () => {
+            this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
+          });
+        } else {
+          this.createDimensionVisuals(canvas, startAnchor as fabric.Object, endAnchor as fabric.Object);
+        }
+        // Bleibe im Dimension-Modus für weitere Bemaßungen
+        this.dimensionStep = 'start';
+        this.firstAnchorPoint = null;
       }
-      // Bleibe im Dimension-Modus für weitere Bemaßungen
-      this.dimensionStep = 'start';
-      this.firstAnchorPoint = null;
     } else {
       console.log('Keine passenden Ankerpunkte für diese Linie gefunden');
     }

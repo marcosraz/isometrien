@@ -66,6 +66,30 @@
 
   <!-- Bottom Actions -->
   <div class="sidebar-footer" *ngIf="!sidebarCollapsed">
+    <!-- Grid Controls -->
+    <div class="grid-controls">
+      <label class="control-label">Grid-Einstellungen</label>
+      <div class="grid-buttons">
+        <button class="grid-btn" 
+                (click)="toggleGrid()" 
+                [class.active]="(gridService.gridState | async)?.enabled"
+                title="Grid ein/ausschalten (G)">
+          <span class="icon">⊞</span>
+          <span class="label">Grid {{ (gridService.gridState | async)?.enabled ? 'Ein' : 'Aus' }}</span>
+        </button>
+        <div class="grid-size-control">
+          <label>Größe: {{ (gridService.gridState | async)?.size }}px</label>
+          <input type="range" 
+                 min="5" 
+                 max="100" 
+                 step="5"
+                 [value]="(gridService.gridState | async)?.size"
+                 (input)="setGridSize($event)"
+                 title="Grid-Größe anpassen">
+        </div>
+      </div>
+    </div>
+    
     <div class="snap-controls">
       <label class="snap-label">Snap-Optionen</label>
       <div class="snap-buttons">
@@ -114,12 +138,17 @@
       </div>
     </div>
     <div class="divider"></div>
-    <button class="footer-btn" (click)="showHelp()" title="Hilfe">
-      <span>❓ Hilfe</span>
-    </button>
-    <button class="footer-btn" (click)="showSettings()" title="Einstellungen">
-      <span>⚙️ Einstellungen</span>
-    </button>
+    <div class="footer-buttons-row">
+      <button class="footer-btn compact" (click)="showHelp()" title="Hilfe">
+        <span>❓</span>
+      </button>
+      <button class="footer-btn compact" (click)="showKeyboardShortcuts()" title="Tastenkürzel">
+        <span>⌨️</span>
+      </button>
+      <button class="footer-btn" (click)="showSettings()" title="Einstellungen">
+        <span>⚙️ Einstellungen</span>
+      </button>
+    </div>
   </div>
 </nav>
 
@@ -132,6 +161,12 @@
             title="Linie zeichnen">
       <span class="icon">📏</span>
       <span class="label">Linie</span>
+    </button>
+    <button class="context-btn" (click)="addTestLine()" 
+            [class.active]="drawingService.drawingMode === 'testLine'"
+            title="Test Linie zeichnen">
+      <span class="icon">🧪</span>
+      <span class="label">Test Linie</span>
     </button>
     <button class="context-btn" (click)="startPiping()" 
             [class.active]="drawingService.drawingMode === 'addPipe'"
@@ -156,13 +191,13 @@
   <!-- Measurement Tools -->
   <div class="context-section" *ngIf="activeSection === 'measurement'">
     <button class="context-btn" (click)="setDimensionMode()" 
-            [class.active]="drawingService.drawingMode === 'dimension' && !drawingService.dimensionService?.isoDimensionMode"
+            [class.active]="drawingService.drawingMode === 'dimension' && !drawingService.dimensionService.isoDimensionMode"
             title="Bemaßung hinzufügen">
       <span class="icon">📏</span>
       <span class="label">Dimension</span>
     </button>
     <button class="context-btn" (click)="setIsoDimensionMode()" 
-            [class.active]="drawingService.drawingMode === 'dimension' && drawingService.dimensionService?.isoDimensionMode"
+            [class.active]="drawingService.drawingMode === 'dimension' && drawingService.dimensionService.isoDimensionMode"
             title="ISO-Bemaßung (TAB für Ausrichtung)">
       <span class="icon">📐</span>
       <span class="label">ISO-Dimension</span>
@@ -304,6 +339,29 @@
       <span class="icon">🔓</span>
       <span class="label">Aufheben</span>
     </button>
+  </div>
+  
+  <!-- Export Tools -->
+  <div class="context-section export-section">
+    <div class="export-header">Export</div>
+    <div class="export-buttons">
+      <button class="export-btn" (click)="exportAsPNG()" title="Als PNG exportieren">
+        <span class="icon">🖼️</span>
+        <span class="label">PNG</span>
+      </button>
+      <button class="export-btn" (click)="exportAsSVG()" title="Als SVG exportieren">
+        <span class="icon">📐</span>
+        <span class="label">SVG</span>
+      </button>
+      <button class="export-btn" (click)="exportAsJSON()" title="Als JSON exportieren">
+        <span class="icon">💾</span>
+        <span class="label">JSON</span>
+      </button>
+      <button class="export-btn" (click)="printCanvas()" title="Drucken">
+        <span class="icon">🖨️</span>
+        <span class="label">Drucken</span>
+      </button>
+    </div>
   </div>
 
   <!-- Status Info -->

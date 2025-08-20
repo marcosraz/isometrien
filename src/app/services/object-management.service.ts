@@ -153,6 +153,10 @@ export class ObjectManagementService {
   }
 
   public isEditingText(canvas: fabric.Canvas): boolean {
+    if (!canvas) {
+      return false;
+    }
+    
     const activeObject = canvas.getActiveObject();
     
     if (!activeObject) {

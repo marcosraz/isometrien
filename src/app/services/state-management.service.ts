@@ -60,7 +60,7 @@ export class StateManagementService {
       const customProps = [
         'customType', 'isDimensionPart', 'dimensionId', 'isWeldPoint',
         'data', 'reusable', 'originalFill', 'associatedLines',
-        '_originalStroke', '_originalStrokeWidth'
+        '_originalStroke', '_originalStrokeWidth', 'perPixelTargetFind', 'targetFindTolerance'
       ];
       return toObjectOriginal.call(this, [...propertiesToInclude, ...customProps]);
     };
@@ -218,6 +218,35 @@ export class StateManagementService {
     try {
       // Load canvas state
       this.canvas.loadFromJSON(JSON.parse(state.canvasJSON), () => {
+        // Fix line selection properties for all lines and paths
+        if (this.canvas) {
+          const objects = this.canvas.getObjects();
+          objects.forEach(obj => {
+            // Fix lines - but skip dimension lines
+            if (obj.type === 'line' && !(obj as any).isDimensionPart) {
+              obj.set({
+                perPixelTargetFind: true,
+                targetFindTolerance: 5,
+                selectable: true,
+                evented: true,
+                hasControls: true,
+                hasBorders: true,
+              });
+            }
+            // Fix paths (for curved pipe segments)
+            else if (obj.type === 'path' && !(obj as any).isDimensionPart) {
+              obj.set({
+                perPixelTargetFind: true,
+                targetFindTolerance: 5,
+                selectable: true,
+                evented: true,
+                hasControls: false,
+                hasBorders: true,
+              });
+            }
+          });
+        }
+        
         // Restore service states
         this.restoreServiceStates(state.serviceStates);
         

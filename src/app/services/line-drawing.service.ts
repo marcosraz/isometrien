@@ -2,6 +2,9 @@ import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { IsometryService } from './isometry.service';
 import { StateManagementService } from './state-management.service';
+import { LineSelectionHelper } from './line-selection-helper';
+import { TestLine } from './test-line.class';
+import { CustomLine } from './custom-line.class';
 
 export interface EditablePipe {
   segments: (fabric.Line | fabric.Path)[];
@@ -18,7 +21,7 @@ export interface EditableLine {
   providedIn: 'root',
 })
 export class LineDrawingService {
-  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' = 'idle';
+  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' = 'idle';
   public lineStartPoint: { x: number; y: number } | null = null;
   public pipePoints: { x: number; y: number }[] = [];
   private previewLine: fabric.Line | null = null;
@@ -61,7 +64,7 @@ export class LineDrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine'
   ): void {
     if (this.drawingMode === 'addPipe' && mode !== 'addPipe') {
       // Aufräumen beim Verlassen des Pipe-Modus
@@ -262,7 +265,7 @@ export class LineDrawingService {
           endPoint = this.snapToAngle(this.lineStartPoint, endPoint);
         }
         
-        const line = new fabric.Line(
+        const line = new CustomLine(
           [
             this.lineStartPoint.x,
             this.lineStartPoint.y,
@@ -272,10 +275,18 @@ export class LineDrawingService {
           {
             stroke: this.getColor('line'),
             strokeWidth: 2,
-            selectable: false,
-            evented: false,
+            selectable: true,
+            evented: true,
+            hasControls: true,
+            hasBorders: true,
+            borderColor: 'rgba(102, 153, 255, 0.75)',
+            padding: 5,
           }
         );
+        
+        // Configure line for better selection visualization
+        LineSelectionHelper.configureLine(line);
+        
         // Wrap line creation in state management
         if (this.stateManagement) {
           this.stateManagement.executeOperation('Draw Line', () => {
@@ -448,15 +459,23 @@ export class LineDrawingService {
       
       if (i === 0) {
         // Erste Linie
-        const line = new fabric.Line(
+        const line = new CustomLine(
           [p1.x, p1.y, p2.x, p2.y],
           {
             stroke: this.getColor('pipe'),
             strokeWidth: 1,
-            selectable: false,
-            evented: false,
+            selectable: true,
+            evented: true,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: 'rgba(102, 153, 255, 0.75)',
+            padding: 5,
           }
         );
+        
+        // Configure line for better selection visualization
+        LineSelectionHelper.configureLine(line);
+        
         canvas.add(line);
         this.pipeSegments.push(line);
       } else {
@@ -538,22 +557,38 @@ export class LineDrawingService {
           fill: '',
           stroke: this.getColor('pipe'),
           strokeWidth: 1,
-          selectable: false,
-          evented: false,
+          selectable: true,
+          evented: true,
+          hasControls: false,
+          hasBorders: true,
+          borderColor: 'rgba(102, 153, 255, 0.75)',
+          padding: 5,
         });
+        
+        // Configure path for better selection visualization
+        LineSelectionHelper.configurePath(arc);
+        
         canvas.add(arc);
         this.pipeSegments.push(arc);
         
         // Erstelle neue Linie vom Bogen zum nächsten Punkt
-        const line = new fabric.Line(
+        const line = new CustomLine(
           [arcEnd.x, arcEnd.y, p2.x, p2.y],
           {
             stroke: this.getColor('pipe'),
             strokeWidth: 1,
-            selectable: false,
-            evented: false,
+            selectable: true,
+            evented: true,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: 'rgba(102, 153, 255, 0.75)',
+            padding: 5,
           }
         );
+        
+        // Configure line for better selection visualization
+        LineSelectionHelper.configureLine(line);
+        
         canvas.add(line);
         this.pipeSegments.push(line);
       }
@@ -905,15 +940,23 @@ export class LineDrawingService {
       
       if (i === 0) {
         // Erste Linie
-        const line = new fabric.Line(
+        const line = new CustomLine(
           [p1.x, p1.y, p2.x, p2.y],
           {
             stroke: this.getColor('pipe'),
             strokeWidth: 1,
             selectable: true,
             evented: true,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: 'rgba(102, 153, 255, 0.75)',
+            padding: 5,
           }
         );
+        
+        // Configure line for better selection visualization
+        LineSelectionHelper.configureLine(line);
+        
         canvas.add(line);
         pipe.segments.push(line);
       } else {
@@ -997,20 +1040,36 @@ export class LineDrawingService {
           strokeWidth: 1,
           selectable: true,
           evented: true,
+          hasControls: false,
+          hasBorders: true,
+          borderColor: 'rgba(102, 153, 255, 0.75)',
+          padding: 5,
         });
+        
+        // Configure path for better selection visualization
+        LineSelectionHelper.configurePath(arc);
+        
         canvas.add(arc);
         pipe.segments.push(arc);
         
         // Erstelle neue Linie vom Bogen zum nächsten Punkt
-        const line = new fabric.Line(
+        const line = new CustomLine(
           [arcEnd.x, arcEnd.y, p2.x, p2.y],
           {
             stroke: this.getColor('pipe'),
             strokeWidth: 1,
             selectable: true,
             evented: true,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: 'rgba(102, 153, 255, 0.75)',
+            padding: 5,
           }
         );
+        
+        // Configure line for better selection visualization
+        LineSelectionHelper.configureLine(line);
+        
         canvas.add(line);
         pipe.segments.push(line);
       }
@@ -1126,12 +1185,18 @@ export class LineDrawingService {
           };
           this.editablePipes.push(newEditablePipe);
 
-          // Setze die Segmente als verschiebbar
+          // Setze die Segmente als verschiebbar und konfiguriere sie richtig
           this.pipeSegments.forEach(segment => {
             segment.set({
               selectable: true,
               evented: true,
             });
+            // Konfiguriere je nach Typ
+            if (segment.type === 'line') {
+              LineSelectionHelper.configureLine(segment as fabric.Line);
+            } else if (segment.type === 'path') {
+              LineSelectionHelper.configurePath(segment as fabric.Path);
+            }
           });
           
           // Clean up preview if exists
@@ -1256,5 +1321,84 @@ export class LineDrawingService {
     }
     
     return { x: xx, y: yy };
+  }
+
+  // Test Line Methods
+  public handleTestLineMouseDown(canvas: fabric.Canvas, options: any): void {
+    if (this.drawingMode !== 'testLine') return;
+    
+    const pointer = canvas.getPointer(options.e);
+    
+    if (!this.lineStartPoint) {
+      // First click - set start point
+      this.lineStartPoint = { x: pointer.x, y: pointer.y };
+    } else {
+      // Second click - create the test line
+      const endPoint = { x: pointer.x, y: pointer.y };
+      
+      // Create TestLine instead of regular Line
+      const testLine = new TestLine(
+        [
+          this.lineStartPoint.x,
+          this.lineStartPoint.y,
+          endPoint.x,
+          endPoint.y,
+        ],
+        {
+          stroke: this.getColor('line'),
+          strokeWidth: 2,
+          selectable: true,
+          evented: true,
+          hasControls: true,
+          hasBorders: true,
+        }
+      );
+      
+      // Wrap in state management
+      if (this.stateManagement) {
+        this.stateManagement.executeOperation('Draw Test Line', () => {
+          canvas.add(testLine);
+        });
+      } else {
+        canvas.add(testLine);
+      }
+      
+      // Reset for next line
+      this.lineStartPoint = null;
+      
+      // Remove preview
+      if (this.previewLine) {
+        canvas.remove(this.previewLine);
+        this.previewLine = null;
+      }
+      
+      canvas.requestRenderAll();
+    }
+  }
+  
+  public handleTestLineMouseMove(canvas: fabric.Canvas, options: any): void {
+    if (this.drawingMode !== 'testLine' || !this.lineStartPoint) return;
+    
+    const pointer = canvas.getPointer(options.e);
+    
+    // Remove old preview
+    if (this.previewLine) {
+      canvas.remove(this.previewLine);
+    }
+    
+    // Create preview line
+    this.previewLine = new fabric.Line(
+      [this.lineStartPoint.x, this.lineStartPoint.y, pointer.x, pointer.y],
+      {
+        stroke: this.getColor('line'),
+        strokeDashArray: [5, 5],
+        strokeWidth: 2,
+        selectable: false,
+        evented: false,
+      }
+    );
+    
+    canvas.add(this.previewLine);
+    canvas.requestRenderAll();
   }
 }

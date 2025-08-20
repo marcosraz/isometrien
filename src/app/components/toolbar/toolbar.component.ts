@@ -4,6 +4,8 @@ import { DrawingService } from '../../services/drawing.service';
 import { LineDrawingService } from '../../services/line-drawing.service';
 import { DimensionService } from '../../services/dimension.service';
 import { ObjectManagementService } from '../../services/object-management.service';
+import { GridService } from '../../services/grid.service';
+import { ExportService } from '../../services/export.service';
 
 @Component({
   selector: 'app-toolbar',
@@ -32,7 +34,9 @@ export class ToolbarComponent {
     public drawingService: DrawingService,
     private lineDrawingService: LineDrawingService,
     private dimensionService: DimensionService,
-    private objectManagementService: ObjectManagementService
+    private objectManagementService: ObjectManagementService,
+    public gridService: GridService,
+    private exportService: ExportService
   ) {
     // Initialize color mode from drawing service
     this.colorMode = this.drawingService.colorMode;
@@ -118,6 +122,10 @@ export class ToolbarComponent {
 
   public addLine(): void {
     this.drawingService.setDrawingMode('addLine');
+  }
+  
+  public addTestLine(): void {
+    this.drawingService.setDrawingMode('testLine');
   }
 
 
@@ -415,11 +423,50 @@ export class ToolbarComponent {
   }
 
   public showHelp(): void {
-    alert('Hilfe:\n\nTastenkombinationen:\n' +
-          '- ESC: Aktuellen Modus beenden\n' +
-          '- Shift: 15° Snap beim Zeichnen\n' +
-          '- Strg: Snap zu Ankerpunkten\n\n' +
+    alert('Hilfe\n\n' +
+          'Willkommen zur Isometrie-Zeichenanwendung!\n\n' +
+          'Diese Anwendung ermöglicht das Erstellen von isometrischen technischen Zeichnungen.\n\n' +
+          'Hauptfunktionen:\n' +
+          '• Linien und Rohrleitungen zeichnen\n' +
+          '• ISO-Bemaßungen hinzufügen\n' +
+          '• Schweißsymbole platzieren\n' +
+          '• Text-Annotationen erstellen\n' +
+          '• Export als PNG, SVG oder JSON\n\n' +
+          'Verwenden Sie die Werkzeuge in der Seitenleiste oder\n' +
+          'klicken Sie auf das Tastatur-Symbol für Shortcuts.\n\n' +
           'Weitere Hilfe finden Sie in der Dokumentation.');
+  }
+  
+  public showKeyboardShortcuts(): void {
+    alert('⌨️ Tastenkürzel\n\n' +
+          '📝 ZEICHNEN:\n' +
+          '• L - Linie zeichnen\n' +
+          '• P - Pipe/Rohrleitung zeichnen\n' +
+          '• D - ISO-Bemaßung (TAB für Ausrichtung)\n' +
+          '• T - Text einfügen\n' +
+          '• ESC - Aktuellen Modus beenden\n\n' +
+          '✏️ BEARBEITEN:\n' +
+          '• Strg+Z - Rückgängig\n' +
+          '• Strg+Y - Wiederholen\n' +
+          '• Delete/Backspace - Objekte löschen\n' +
+          '• Shift - 15° Snap beim Zeichnen\n' +
+          '• Strg - Snap zu Ankerpunkten\n\n' +
+          '👁️ ANSICHT:\n' +
+          '• G - Grid ein/ausschalten\n' +
+          '• F - An Bildschirm anpassen\n' +
+          '• + / - - Zoom rein/raus\n' +
+          '• Strg+0 - Zoom zurücksetzen\n' +
+          '• Space+Drag - Pan (verschieben)\n' +
+          '• Mausrad - Zoom\n' +
+          '• Alt+Mausrad - Grid-Größe ändern\n\n' +
+          '🎨 FARBMODI:\n' +
+          '• Alt+1 - Zeichnungsmodus (Farbe)\n' +
+          '• Alt+2 - Schwarz/Weiß Modus\n' +
+          '• Alt+3 - DIN ISO Norm\n\n' +
+          '💾 EXPORT:\n' +
+          '• Strg+S - Als PNG exportieren\n' +
+          '• Strg+Shift+S - Als SVG exportieren\n' +
+          '• Strg+P - Drucken');
   }
 
   public showSettings(): void {
@@ -429,5 +476,31 @@ export class ToolbarComponent {
   public setColorMode(mode: 'drawing' | 'blackwhite' | 'norm'): void {
     this.colorMode = mode;
     this.drawingService.setColorMode(mode);
+  }
+  
+  public toggleGrid(): void {
+    this.gridService.toggleGrid();
+  }
+  
+  public setGridSize(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const size = parseInt(input.value, 10);
+    this.gridService.setGridSize(size);
+  }
+  
+  public exportAsPNG(): void {
+    this.exportService.exportAsPNG();
+  }
+  
+  public exportAsSVG(): void {
+    this.exportService.exportAsSVG();
+  }
+  
+  public exportAsJSON(): void {
+    this.exportService.exportAsJSON();
+  }
+  
+  public printCanvas(): void {
+    this.exportService.printCanvas();
   }
 }

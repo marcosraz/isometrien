@@ -8,6 +8,8 @@ import { WeldingService } from './welding.service';
 import { StateManagementService } from './state-management.service';
 import { PipingService } from './piping.service';
 import { IsometryToolsService } from './isometry-tools.service';
+import { ExportService } from './export.service';
+import { RenderSchedulerService } from './render-scheduler.service';
 import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
@@ -61,7 +63,9 @@ export class DrawingService {
     private weldingService: WeldingService,
     private stateManagementService: StateManagementService,
     private pipingService: PipingService,
-    private isometryToolsService: IsometryToolsService
+    private isometryToolsService: IsometryToolsService,
+    private exportService: ExportService,
+    private renderScheduler: RenderSchedulerService
   ) {
     // Connect state management to services
     this.lineDrawingService.setStateManagement(this.stateManagementService);
@@ -82,6 +86,7 @@ export class DrawingService {
     this.weldingService.setCanvas(canvas);
     this.pipingService.setCanvas(canvas);
     this.isometryToolsService.setCanvas(canvas);
+    this.exportService.initializeCanvas(canvas);
   }
 
   public requestRedraw(): void {
@@ -146,11 +151,13 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'testLine'
   ): void {
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
-      this.dimensionService.resetAnchorHighlights(this.canvas);
+      if (this.canvas) {
+        this.dimensionService.resetAnchorHighlights(this.canvas);
+      }
       this.dimensionService.stopDimensioning();
     }
     
@@ -202,6 +209,8 @@ export class DrawingService {
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
+    } else if (mode === 'testLine') {
+      this.lineDrawingService.setDrawingMode('testLine');
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
@@ -259,6 +268,12 @@ export class DrawingService {
       return;
     }
 
+    // Handle test line mode
+    if (this.lineDrawingService.drawingMode === 'testLine') {
+      this.lineDrawingService.handleTestLineMouseDown(this.canvas, options);
+      return;
+    }
+    
     this.lineDrawingService.handleLineMouseDown(this.canvas, options);
     this.lineDrawingService.handlePipeMouseDown(this.canvas, options);
   }
@@ -285,10 +300,17 @@ export class DrawingService {
       this.dimensionService.handleDimensionMouseMove(this.canvas, options);
       return;
     }
+    
+    // Handle test line mode
+    if (drawingMode === 'testLine') {
+      this.lineDrawingService.handleTestLineMouseMove(this.canvas, options);
+      return;
+    }
 
     this.lineDrawingService.handleLineMouseMove(this.canvas, options);
     this.lineDrawingService.handlePipeMouseMove(this.canvas, options);
-    this.canvas.requestRenderAll();
+    // Use debounced render for mouse move operations
+    this.renderScheduler.debouncedRender(this.canvas);
   }
 
   public handleDoubleClick(options: fabric.TEvent<MouseEvent>): void {
@@ -347,6 +369,16 @@ export class DrawingService {
       this.dimensionService.stopDimensioning();
       this.dimensionService.clearTemporaryDimensionAnchors(this.canvas);
     }
+    // Deselect any active object and clear top context
+    if (this.canvas) {
+      this.canvas.discardActiveObject();
+      // Clear the top context to remove any selection artifacts
+      const topCtx = this.canvas.contextTop;
+      if (topCtx) {
+        topCtx.clearRect(0, 0, this.canvas.width!, this.canvas.height!);
+      }
+      this.canvas.requestRenderAll();
+    }
   }
 
   public groupSelectedObjects(): void {
@@ -367,7 +399,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'testLine' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
@@ -399,10 +431,10 @@ export class DrawingService {
     if (this.isometryToolsService.isSlopeModeActive()) {
       return 'slope';
     }
-    return this.lineDrawingService.drawingMode;
+    return this.lineDrawingService.drawingMode as any;
   }
 
-  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope') {
+  public set drawingMode(mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'testLine') {
     if (mode === 'weldstamp') {
       this.lineDrawingService.setDrawingMode('idle');
       this.weldingService.startWeldstamp();
@@ -448,6 +480,8 @@ export class DrawingService {
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
+    } else if (mode === 'testLine') {
+      this.lineDrawingService.setDrawingMode('testLine');
     } else {
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
