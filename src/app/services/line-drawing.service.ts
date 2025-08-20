@@ -602,8 +602,15 @@ export class LineDrawingService {
         selectable: true,
         evented: true
       });
-      canvas.add(anchor);
-      // Ankerpunkte sind automatisch oben, da sie zuletzt hinzugefügt wurden
+      
+      // Nur hinzufügen wenn noch nicht im Canvas
+      if (!canvas.contains(anchor)) {
+        canvas.add(anchor);
+      } else {
+        // Wenn schon vorhanden, entferne und füge wieder hinzu (bringt nach vorne)
+        canvas.remove(anchor);
+        canvas.add(anchor);
+      }
     });
     
     canvas.requestRenderAll();

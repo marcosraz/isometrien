@@ -58,6 +58,11 @@ export class DimensionService {
     this.dimensionStep = 'start';
     this.isoDimensionMode = false;
     console.log('Bemaßungsmodus gestartet. Bitte ersten Punkt wählen.');
+    
+    // Disable canvas selection to prevent selection box
+    if (this.canvas) {
+      this.canvas.selection = false;
+    }
   }
   
   public startIsoDimensioning(): void {
@@ -65,6 +70,11 @@ export class DimensionService {
     this.isoDimensionMode = true;
     this.isoHelpLineOrientation = 'vertical';
     console.log('ISO-Bemaßungsmodus gestartet. TAB-Taste für Hilfslinien-Ausrichtung.');
+    
+    // Disable canvas selection to prevent selection box
+    if (this.canvas) {
+      this.canvas.selection = false;
+    }
   }
   
   public toggleIsoHelpLineOrientation(): void {
@@ -95,6 +105,11 @@ export class DimensionService {
     this.dimensionDragStartPoint = null;
     this.initialDimensionPositions = [];
     console.log('Bemaßungsmodus beendet.');
+    
+    // Re-enable canvas selection when dimension mode ends
+    if (this.canvas) {
+      this.canvas.selection = true;
+    }
   }
   
   public resetAnchorHighlights(canvas: fabric.Canvas): void {
@@ -244,6 +259,10 @@ export class DimensionService {
             this.dimensionDragStartPoint = null;
             this.initialDimensionPositions = [];
             console.log('Bemaßung platziert. Bereit für nächste Bemaßung.');
+            
+            // WICHTIG: Deselektiere alle Objekte nach der Bemaßung
+            canvas.discardActiveObject();
+            canvas.requestRenderAll();
             
             // Ankerpunkte zurücksetzen
             this.resetAnchorHighlights(canvas);
@@ -621,8 +640,8 @@ export class DimensionService {
     // Füge alle Elemente einzeln zum Canvas hinzu
     canvas.add(extensionLine1, extensionLine2, dimensionLine, arrow1, arrow2);
     
-    // Stelle sicher, dass alle Dimensionselemente keine Maus-Events blockieren
-    [extensionLine1, extensionLine2, dimensionLine, arrow1, arrow2].forEach(element => {
+    // Stelle sicher, dass alle Dimensionselemente keine Maus-Events blockieren außer der Hauptlinie
+    [extensionLine1, extensionLine2, arrow1, arrow2].forEach(element => {
       element.set({
         selectable: false,
         evented: false,
@@ -631,12 +650,25 @@ export class DimensionService {
       });
     });
     
+    // Dimensionslinie soll Events empfangen für Hover/Drag
+    dimensionLine.set({
+      selectable: false,
+      evented: true,  // Events aktivieren
+      hoverCursor: 'move',
+      moveCursor: 'move',
+      stroke: '#0066cc', // Blaue Farbe für bessere Sichtbarkeit
+      strokeWidth: 2
+    });
+    
     // WICHTIG: Setze die Z-Order der Dimensionselemente
     // Die Elemente werden in der Reihenfolge gerendert, in der sie hinzugefügt wurden
 
     // Speichere die Dimension ID
     (dimensionData as any).dimensionId = dimensionId;
 
+    // Direkte Event-Handler für die Dimensionslinie (anstatt Blocker)
+    this.setupDimensionLineEvents(canvas, dimensionData, dimensionLine);
+    
     // Aktualisiere die Dimension, wenn sich die Ankerpunkte bewegen
     this.setupAnchorListeners(canvas, dimensionData);
 
@@ -888,10 +920,12 @@ export class DimensionService {
     const leftLine = new fabric.Line(
       [dimLineStart.x, dimLineStart.y, textX - dx, textY - dy],
       {
-        stroke: 'black',
-        strokeWidth: 1,
+        stroke: '#0066cc',
+        strokeWidth: 2,
         selectable: false,
-        evented: false,
+        evented: true,  // Events aktivieren für ISO-Dimension
+        hoverCursor: 'move',
+        moveCursor: 'move'
       }
     );
     (leftLine as any).dimensionId = dimensionId;
@@ -900,16 +934,21 @@ export class DimensionService {
     const rightLine = new fabric.Line(
       [textX + dx, textY + dy, dimLineEnd.x, dimLineEnd.y],
       {
-        stroke: 'black',
-        strokeWidth: 1,
+        stroke: '#0066cc',
+        strokeWidth: 2,
         selectable: false,
-        evented: false,
+        evented: true,  // Events aktivieren für ISO-Dimension
+        hoverCursor: 'move',
+        moveCursor: 'move'
       }
     );
     (rightLine as any).dimensionId = dimensionId;
     (rightLine as any).isDimensionPart = true;
     
     canvas.add(leftLine, rightLine);
+    
+    // Event-Handler für beide ISO-Dimensions-Linien hinzufügen
+    this.setupIsoDimensionLineEvents(canvas, dimensionData, leftLine, rightLine);
     
     // Speichere beide Linien für spätere Verwendung
     dimensionData.dimensionLine = leftLine;
@@ -937,6 +976,9 @@ export class DimensionService {
       
       canvas.requestRenderAll();
     });
+
+    // Füge Interaktionsfunktionalität für ISO-Bemaßung hinzu
+    this.createDimensionInteractionGroup(canvas, dimensionData);
 
     canvas.requestRenderAll();
   }
@@ -1218,6 +1260,23 @@ export class DimensionService {
     canvas.requestRenderAll();
   }
 
+  private getArrowPath(point: { x: number; y: number }, angle: number, size: number): any[] {
+    const headLength = size;
+    const headAngle = Math.PI / 6;
+    
+    // Berechne Pfeilkopf-Punkte (gleiche Logik wie createArrow)
+    const x1 = point.x - headLength * Math.cos(angle - headAngle);
+    const y1 = point.y - headLength * Math.sin(angle - headAngle);
+    const x2 = point.x - headLength * Math.cos(angle + headAngle);
+    const y2 = point.y - headLength * Math.sin(angle + headAngle);
+    
+    return [
+      ['M', x1, y1],
+      ['L', point.x, point.y],
+      ['L', x2, y2],
+    ];
+  }
+
   private createArrow(point: { x: number; y: number }, angle: number, size: number): fabric.Path {
     const headLength = size;
     const headAngle = Math.PI / 6; // 30 Grad
@@ -1384,7 +1443,7 @@ export class DimensionService {
     (blocker as any).dimensionId = dimensionId;
     (blocker as any).isDimensionPart = true;
     
-    // Blocker verhindert Interaktion mit darunterliegenden Objekten (außer Text)
+    // Blocker ermöglicht Verschieben der Bemaßung über die gesamte Linie
     blocker.on('mousedown', (e) => {
       // Prüfe ob der Klick über dem Text ist
       const pointer = canvas.getPointer(e.e);
@@ -1396,33 +1455,97 @@ export class DimensionService {
         return;
       }
       
+      // Prüfe ob die Maus nahe der Bemaßungslinie ist
+      const distToLine = this.getDistanceToLine(pointer, extLine1_end, extLine2_end);
+      
+      // Nur Drag-Handling wenn nahe der Linie (15 Pixel Toleranz)
+      if (distToLine < 15) {
+        startMousePos = null;
+        startOffset = dimensionData.offset;
+        
+        const mouseMoveHandler = (e: any) => {
+          handleDimensionDrag(e);
+        };
+        
+        const mouseUpHandler = () => {
+          canvas.off('mouse:move', mouseMoveHandler);
+          canvas.off('mouse:up', mouseUpHandler);
+          startMousePos = null;
+        };
+        
+        canvas.on('mouse:move', mouseMoveHandler);
+        canvas.on('mouse:up', mouseUpHandler);
+        
+        e.e.preventDefault();
+        e.e.stopPropagation();
+        return false;
+      }
+      
       e.e.preventDefault();
       e.e.stopPropagation();
       return false;
     });
     
-    // Hover-Effekte für den Blocker (zeigt/versteckt den Button)
+    // Hover-Effekte für den Blocker (zeigt/versteckt den Button und hebt Linie hervor)
     blocker.on('mouseover', (e) => {
+      console.log('🔍 Blocker mouseover triggered');
       // Prüfe ob die Maus nahe der Bemaßungslinie ist
       const pointer = canvas.getPointer(e.e);
       const distToLine = this.getDistanceToLine(pointer, extLine1_end, extLine2_end);
       
+      console.log('📏 Distance to line:', distToLine, 'Pointer:', pointer);
+      
       // Nur aktivieren wenn nahe der Linie (15 Pixel Toleranz)
       if (distToLine < 15) {
+        console.log('✅ Within tolerance - highlighting line RED');
         controlButton.set('opacity', 1);
         arrows.set('opacity', 1);
+        
+        // Färbe die Bemaßungslinie rot
+        dimensionData.dimensionLine.set({
+          stroke: '#ff0000',
+          strokeWidth: 2
+        });
+        
+        // Wenn es eine rechte Linie gibt, färbe auch diese rot
+        if ((dimensionData as any).rightLine) {
+          console.log('🔴 Also highlighting right line RED');
+          ((dimensionData as any).rightLine as fabric.Line).set({
+            stroke: '#ff0000',
+            strokeWidth: 2
+          });
+        }
+        
         canvas.renderAll();
+      } else {
+        console.log('❌ Outside tolerance - no highlight');
       }
     });
     
     blocker.on('mouseout', () => {
       controlButton.set('opacity', 0);
       arrows.set('opacity', 0);
+      
+      // Setze Bemaßungslinie zurück auf normale Farbe
+      dimensionData.dimensionLine.set({
+        stroke: 'black',
+        strokeWidth: 1
+      });
+      
+      // Wenn es eine rechte Linie gibt, setze auch diese zurück
+      if ((dimensionData as any).rightLine) {
+        ((dimensionData as any).rightLine as fabric.Line).set({
+          stroke: 'black',
+          strokeWidth: 1
+        });
+      }
+      
       canvas.renderAll();
     });
     
-    canvas.add(blocker);
-    canvas.add(dimensionData.text); // Text NACH dem Blocker, damit er darüber liegt
+    // BLOCKER DEAKTIVIERT - Wir verwenden jetzt direkte Events auf der Dimensionslinie
+    // canvas.add(blocker);
+    canvas.add(dimensionData.text);
     canvas.add(controlButton, arrows);
     
     // Control Button und Arrows sind automatisch oben, da sie zuletzt hinzugefügt wurden
@@ -1567,6 +1690,224 @@ export class DimensionService {
     };
   }
 
+  public setupIsoDimensionLineEvents(canvas: fabric.Canvas, dimensionData: DimensionData, leftLine: fabric.Line, rightLine: fabric.Line): void {
+    // Event-Handler für beide Linien der ISO-Dimension
+    [leftLine, rightLine].forEach(line => {
+      let startMousePos: { x: number; y: number } | null = null;
+      let startOffset = dimensionData.offset;
+      
+      // Hover-Event für rote Hervorhebung
+      line.on('mouseover', () => {
+        console.log('🔍 ISO dimension line mouseover triggered');
+        
+        // Beide Linien rot hervorheben
+        leftLine.set({
+          stroke: 'red',
+          strokeWidth: 3
+        });
+        rightLine.set({
+          stroke: 'red',
+          strokeWidth: 3
+        });
+        canvas.requestRenderAll();
+        console.log('✅ ISO lines highlighted RED');
+      });
+      
+      // Mouseout-Event um normale Farbe wiederherzustellen
+      line.on('mouseout', () => {
+        console.log('👋 ISO dimension line mouseout');
+        
+        // Beide Linien zurücksetzen
+        leftLine.set({
+          stroke: '#0066cc',
+          strokeWidth: 2
+        });
+        rightLine.set({
+          stroke: '#0066cc',
+          strokeWidth: 2
+        });
+        canvas.requestRenderAll();
+      });
+      
+      // Mousedown für Drag-Funktionalität
+      line.on('mousedown', (e) => {
+        console.log('🖱️ ISO dimension line mousedown for drag');
+        startMousePos = canvas.getPointer(e.e);
+        startOffset = dimensionData.offset;
+        
+        // Deaktiviere Canvas-Selection während des Drags
+        const previousSelection = canvas.selection;
+        canvas.selection = false;
+        
+        const mouseMoveHandler = (e: any) => {
+          if (!startMousePos) return;
+          
+          const currentPos = canvas.getPointer(e.e);
+          
+          // Position der Ankerpunkte
+          const startCoords = {
+            x: dimensionData.startAnchor.left as number,
+            y: dimensionData.startAnchor.top as number,
+          };
+          const endCoords = {
+            x: dimensionData.endAnchor.left as number,
+            y: dimensionData.endAnchor.top as number,
+          };
+          
+          // Für ISO-Dimensionen: Berechne basierend auf der gespeicherten Orientierung
+          const orientation = (dimensionData as any).isoOrientation || 'vertical';
+          const midPoint = {
+            x: (startCoords.x + endCoords.x) / 2,
+            y: (startCoords.y + endCoords.y) / 2,
+          };
+          
+          let helpLineAngle: number;
+          switch (orientation) {
+            case 'vertical':
+              helpLineAngle = -Math.PI / 2; // 90 Grad nach oben
+              break;
+            case '30deg':
+              helpLineAngle = -Math.PI / 6; // 30 Grad
+              break;
+            case '150deg':
+              helpLineAngle = -(5 * Math.PI) / 6; // 150 Grad
+              break;
+            default:
+              helpLineAngle = -Math.PI / 2;
+          }
+          
+          // Berechne den Offset basierend auf der Orientierung
+          const dx = currentPos.x - midPoint.x;
+          const dy = currentPos.y - midPoint.y;
+          const newOffset = dx * Math.cos(helpLineAngle) + dy * Math.sin(helpLineAngle);
+          
+          // Mindestabstand beibehalten
+          const finalOffset = Math.abs(newOffset) < 20 ? (newOffset < 0 ? -20 : 20) : newOffset;
+          
+          dimensionData.offset = finalOffset;
+          (dimensionData as any).isoOffset = finalOffset;
+          this.updateIsoDimensionPosition(canvas, dimensionData);
+          
+          console.log('📏 Dragging ISO dimension with orientation:', orientation, ', new offset:', finalOffset);
+        };
+        
+        const mouseUpHandler = () => {
+          console.log('🔄 ISO dimension drag ended');
+          startMousePos = null;
+          canvas.off('mouse:move', mouseMoveHandler);
+          canvas.off('mouse:up', mouseUpHandler);
+          
+          // Stelle Canvas-Selection wieder her
+          canvas.selection = previousSelection;
+        };
+        
+        canvas.on('mouse:move', mouseMoveHandler);
+        canvas.on('mouse:up', mouseUpHandler);
+        
+        e.e.preventDefault();
+        e.e.stopPropagation();
+      });
+    });
+  }
+
+  public setupDimensionLineEvents(canvas: fabric.Canvas, dimensionData: DimensionData, dimensionLine: fabric.Path | fabric.Line): void {
+    let startMousePos: { x: number; y: number } | null = null;
+    let startOffset = dimensionData.offset;
+
+    // Hover-Event für rote Hervorhebung
+    dimensionLine.on('mouseover', () => {
+      console.log('🔍 Direct dimension line mouseover triggered');
+      
+      // Färbe die Dimensionslinie rot
+      dimensionLine.set({
+        stroke: 'red',
+        strokeWidth: 3
+      });
+      canvas.requestRenderAll();
+      console.log('✅ Line highlighted RED directly');
+    });
+
+    // Mouseout-Event um normale Farbe wiederherzustellen
+    dimensionLine.on('mouseout', () => {
+      console.log('👋 Dimension line mouseout');
+      
+      // Setze Bemaßungslinie zurück auf normale Farbe
+      dimensionLine.set({
+        stroke: '#0066cc',
+        strokeWidth: 2
+      });
+      canvas.requestRenderAll();
+    });
+
+    // Mousedown für Drag-Funktionalität
+    dimensionLine.on('mousedown', (e) => {
+      console.log('🖱️ Dimension line mousedown for drag');
+      startMousePos = canvas.getPointer(e.e);
+      startOffset = dimensionData.offset;
+      
+      // Deaktiviere Canvas-Selection während des Drags
+      const previousSelection = canvas.selection;
+      canvas.selection = false;
+      
+      const mouseMoveHandler = (e: any) => {
+        if (!startMousePos) return;
+        
+        const currentPos = canvas.getPointer(e.e);
+        
+        // Position der Ankerpunkte
+        const startCoords = {
+          x: dimensionData.startAnchor.left as number,
+          y: dimensionData.startAnchor.top as number,
+        };
+        const endCoords = {
+          x: dimensionData.endAnchor.left as number,
+          y: dimensionData.endAnchor.top as number,
+        };
+        
+        // Berechne den senkrechten Abstand der Maus zur Basislinie
+        // Formel: Abstand = (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by)) / sqrt((by - cy)^2 + (cx - bx)^2)
+        const dx = endCoords.x - startCoords.x;
+        const dy = endCoords.y - startCoords.y;
+        const lineLength = Math.sqrt(dx * dx + dy * dy);
+        
+        if (lineLength === 0) return; // Verhindere Division durch 0
+        
+        // Berechne den vorzeichenbehafteten Abstand (positiv = rechts/oben, negativ = links/unten)
+        const signedDistance = ((currentPos.x - startCoords.x) * dy - (currentPos.y - startCoords.y) * dx) / lineLength;
+        
+        // Der neue Offset ist einfach der Abstand zur Basislinie
+        const newOffset = signedDistance;
+        
+        // Aktualisiere die Dimension mit dem neuen Offset
+        this.updateDimensionWithOffset(canvas, dimensionData, newOffset);
+        
+        console.log('📏 Dragging dimension, new offset:', newOffset);
+      };
+      
+      const mouseUpHandler = () => {
+        console.log('🔄 Dimension drag ended');
+        startMousePos = null;
+        canvas.off('mouse:move', mouseMoveHandler);
+        canvas.off('mouse:up', mouseUpHandler);
+        
+        // Stelle Canvas-Selection wieder her
+        canvas.selection = previousSelection;
+      };
+      
+      canvas.on('mouse:move', mouseMoveHandler);
+      canvas.on('mouse:up', mouseUpHandler);
+      
+      e.e.preventDefault();
+      e.e.stopPropagation();
+    });
+  }
+
+  public updateDimensionWithOffset(canvas: fabric.Canvas, dimensionData: DimensionData, newOffset: number): void {
+    // Aktualisiere den Offset und triggere eine Neupositionierung
+    dimensionData.offset = newOffset;
+    this.updateDimensionPosition(canvas, dimensionData);
+  }
+
   private setupAnchorListeners(canvas: fabric.Canvas, dimensionData: DimensionData): void {
     // Überwache Änderungen an den Ankerpunkten
     const updateDimension = () => {
@@ -1676,57 +2017,32 @@ export class DimensionService {
       });
     }
 
-    // Update Arrows - Entferne die alten Pfeile explizit
-    const dimensionId = (dimensionData.extensionLine1 as any).dimensionId;
-    
-    // Entferne alte Pfeile direkt
-    if (dimensionData.arrow1) {
-      canvas.remove(dimensionData.arrow1);
-    }
-    if (dimensionData.arrow2) {
-      canvas.remove(dimensionData.arrow2);
-    }
-    
-    // Zusätzlich: Finde und entferne ALLE Path-Objekte mit der gleichen dimensionId oder isArrow flag
-    const objectsToRemove: fabric.Object[] = [];
-    canvas.getObjects().forEach(obj => {
-      if (obj.type === 'path' && 
-          ((obj as any).dimensionId === dimensionId || (obj as any).isArrow === true)) {
-        // Prüfe ob es zu dieser Dimension gehört
-        if ((obj as any).dimensionId === dimensionId) {
-          objectsToRemove.push(obj);
-        }
-      }
-    });
-    
-    objectsToRemove.forEach(obj => {
-      canvas.remove(obj);
-    });
-    
-    // Force render nach dem Entfernen
-    canvas.renderAll();
-    
-    // Setze alte Referenzen auf null
-    dimensionData.arrow1 = null as any;
-    dimensionData.arrow2 = null as any;
-    
+    // Update Arrows - Erstelle Pfeile immer neu für korrekte Positionierung
     const lineAngle = Math.atan2(
       extLine2_end.y - extLine1_end.y,
       extLine2_end.x - extLine1_end.x
     );
     
+    const dimensionId = (dimensionData.extensionLine1 as any).dimensionId;
+    
+    // Entferne alte Pfeile immer
+    if (dimensionData.arrow1 && canvas.contains(dimensionData.arrow1)) {
+      canvas.remove(dimensionData.arrow1);
+    }
+    if (dimensionData.arrow2 && canvas.contains(dimensionData.arrow2)) {
+      canvas.remove(dimensionData.arrow2);
+    }
+    
+    // Erstelle neue Pfeile
     dimensionData.arrow1 = this.createArrow(extLine1_end, lineAngle + Math.PI, 8);
     dimensionData.arrow2 = this.createArrow(extLine2_end, lineAngle, 8);
     
-    // Stelle sicher, dass die neuen Pfeile die richtige dimensionId haben
+    // Setze Eigenschaften
     (dimensionData.arrow1 as any).dimensionId = dimensionId;
     (dimensionData.arrow2 as any).dimensionId = dimensionId;
     (dimensionData.arrow1 as any).isDimensionPart = true;
     (dimensionData.arrow2 as any).isDimensionPart = true;
-    (dimensionData.arrow1 as any).isArrow = true;
-    (dimensionData.arrow2 as any).isArrow = true;
     
-    // Setze Eigenschaften für die neuen Pfeile
     dimensionData.arrow1.set({
       selectable: false,
       evented: false,
@@ -1741,9 +2057,6 @@ export class DimensionService {
     });
     
     canvas.add(dimensionData.arrow1, dimensionData.arrow2);
-    
-    // Force render nach dem Hinzufügen
-    canvas.renderAll();
 
     // Update Text
     const textX = (extLine1_end.x + extLine2_end.x) / 2;
@@ -1761,6 +2074,10 @@ export class DimensionService {
       angle: textAngle,
     });
 
+    // Event-Handler bleiben erhalten - nicht neu anhängen!
+    // Die Event-Handler wurden bereits beim Erstellen der Dimension gesetzt
+    // und bleiben während des Drag-Vorgangs aktiv
+    
     canvas.requestRenderAll();
   }
 
@@ -1832,7 +2149,10 @@ export class DimensionService {
     }
 
     // Update Arrows - Entferne die alten Pfeile explizit
-    const dimensionId2 = (dimensionData as any).dimensionId;
+    const dimensionId2 = (dimensionData.extensionLine1 as any).dimensionId || 
+                        (dimensionData.extensionLine2 as any).dimensionId || 
+                        (dimensionData as any).dimensionId ||
+                        `dimension_${Date.now()}_${Math.random()}`;
     
     // Entferne alte Pfeile direkt
     if (dimensionData.arrow1) {
@@ -1933,7 +2253,105 @@ export class DimensionService {
       });
     }
 
+    // WICHTIG: Event-Handler nach Update wieder anhängen
+    this.reattachDimensionLineEvents(canvas, dimensionData, dimensionData.dimensionLine);
+    
     canvas.requestRenderAll();
+  }
+
+  // Methode zum erneuten Anhängen der Event-Handler nach Updates
+  private reattachDimensionLineEvents(canvas: fabric.Canvas, dimensionData: DimensionData, dimensionLine: fabric.Path | fabric.Line): void {
+    // Entferne alte Event-Handler falls vorhanden
+    dimensionLine.off('mouseover');
+    dimensionLine.off('mouseout');
+    dimensionLine.off('mousedown');
+    
+    // Stelle sicher, dass die Linie Events empfangen kann
+    dimensionLine.set({
+      selectable: false,
+      evented: true,
+      hoverCursor: 'move',
+      moveCursor: 'move'
+    });
+    
+    // Füge die Event-Handler wieder hinzu
+    let startMousePos: { x: number; y: number } | null = null;
+    let startOffset = dimensionData.offset;
+    
+    dimensionLine.on('mouseover', () => {
+      console.log('🔍 Dimension line mouseover (reattached)');
+      dimensionLine.set({
+        stroke: 'red',
+        strokeWidth: 3
+      });
+      canvas.requestRenderAll();
+    });
+    
+    dimensionLine.on('mouseout', () => {
+      console.log('👋 Dimension line mouseout (reattached)');
+      dimensionLine.set({
+        stroke: '#0066cc',
+        strokeWidth: 2
+      });
+      canvas.requestRenderAll();
+    });
+    
+    dimensionLine.on('mousedown', (e) => {
+      console.log('🖱️ Dimension line mousedown for drag (reattached)');
+      startMousePos = canvas.getPointer(e.e);
+      startOffset = dimensionData.offset;
+      
+      // Deaktiviere Canvas-Selection während des Drags
+      const previousSelection = canvas.selection;
+      canvas.selection = false;
+      
+      const mouseMoveHandler = (e: any) => {
+        const currentPos = canvas.getPointer(e.e);
+        
+        // Position der Ankerpunkte
+        const startCoords = {
+          x: dimensionData.startAnchor.left as number,
+          y: dimensionData.startAnchor.top as number,
+        };
+        const endCoords = {
+          x: dimensionData.endAnchor.left as number,
+          y: dimensionData.endAnchor.top as number,
+        };
+        
+        // Berechne den senkrechten Abstand der Maus zur Basislinie
+        const dx = endCoords.x - startCoords.x;
+        const dy = endCoords.y - startCoords.y;
+        const lineLength = Math.sqrt(dx * dx + dy * dy);
+        
+        if (lineLength === 0) return; // Verhindere Division durch 0
+        
+        // Berechne den vorzeichenbehafteten Abstand
+        const signedDistance = ((currentPos.x - startCoords.x) * dy - (currentPos.y - startCoords.y) * dx) / lineLength;
+        
+        const newOffset = signedDistance;
+        
+        dimensionData.offset = newOffset;
+        this.updateDimensionPosition(canvas, dimensionData);
+        
+        console.log('📏 Dragging dimension (reattached), new offset:', newOffset);
+      };
+      
+      const mouseUpHandler = () => {
+        console.log('🔄 Dimension drag ended');
+        startMousePos = null;
+        canvas.off('mouse:move', mouseMoveHandler);
+        canvas.off('mouse:up', mouseUpHandler);
+        
+        // Stelle Canvas-Selection wieder her
+        canvas.selection = previousSelection;
+      };
+      
+      canvas.on('mouse:move', mouseMoveHandler);
+      canvas.on('mouse:up', mouseUpHandler);
+      
+      e.e.preventDefault();
+      e.e.stopPropagation();
+    });
   }
 
   // Methode zum Erstellen einer Offset-Steuerung für die Dimension

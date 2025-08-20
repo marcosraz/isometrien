@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { BehaviorSubject } from 'rxjs';
+import { ZoomSelectionWorkaroundService } from './zoom-selection-workaround.service';
 
 export interface ViewportState {
   zoom: number;
@@ -31,6 +32,8 @@ export class ZoomPanService {
   
   initializeCanvas(canvas: fabric.Canvas): void {
     this.canvas = canvas;
+    // Apply the zoom selection workaround
+    ZoomSelectionWorkaroundService.applyWorkaround(canvas);
     this.setupZoomControls();
     this.setupPanControls();
   }
@@ -50,6 +53,7 @@ export class ZoomPanService {
       zoom *= 0.999 ** delta;
       zoom = Math.max(0.1, Math.min(5, zoom)); // Limit zoom range
       
+      // Apply zoom - the ZoomSelectionFixService will handle selection and coordinate updates
       const point = new fabric.Point(event.offsetX, event.offsetY);
       this.canvas.zoomToPoint(point, zoom);
       
@@ -110,6 +114,11 @@ export class ZoomPanService {
         vpt[4] += event.clientX - this.lastPosX;
         vpt[5] += event.clientY - this.lastPosY;
         
+        // Update object coordinates after pan
+        this.canvas.getObjects().forEach(obj => {
+          obj.setCoords();
+        });
+        
         this.canvas.requestRenderAll();
         this.lastPosX = event.clientX;
         this.lastPosY = event.clientY;
@@ -162,6 +171,11 @@ export class ZoomPanService {
         vpt[4] += event.clientX - this.lastPosX;
         vpt[5] += event.clientY - this.lastPosY;
         
+        // Update object coordinates after pan
+        this.canvas.getObjects().forEach(obj => {
+          obj.setCoords();
+        });
+        
         this.canvas.requestRenderAll();
         this.lastPosX = event.clientX;
         this.lastPosY = event.clientY;
@@ -180,6 +194,12 @@ export class ZoomPanService {
         this._panState.next(false);
         this.canvas.selection = true;
         this.canvas.setCursor(this.spaceKeyPressed ? 'grab' : 'default');
+        
+        // Update object coordinates after pan ends
+        this.canvas.getObjects().forEach(obj => {
+          obj.setCoords();
+        });
+        this.canvas.requestRenderAll();
       }
     });
   }
@@ -187,7 +207,52 @@ export class ZoomPanService {
   zoomIn(): void {
     const currentZoom = this.canvas.getZoom();
     const newZoom = Math.min(currentZoom * 1.2, 5);
+    
+    // Store active selection
+    const activeObject = this.canvas.getActiveObject();
+    const selectedObjects = this.canvas.getActiveObjects();
+    
     this.canvas.setZoom(newZoom);
+    
+    // Update object coordinates after zoom
+    this.canvas.getObjects().forEach(obj => {
+      obj.setCoords();
+    });
+    
+    // Force canvas to recalculate its offset
+    (this.canvas as any).calcOffset();
+    
+    // Force update of selection controls if there's an active selection
+    if (activeObject) {
+      this.canvas.discardActiveObject();
+      
+      // Clear the top context
+      const topCtx = (this.canvas as any).contextTop;
+      if (topCtx) {
+        topCtx.clearRect(0, 0, this.canvas.width!, this.canvas.height!);
+      }
+      
+      this.canvas.renderAll();
+      
+      requestAnimationFrame(() => {
+        if (selectedObjects.length > 1) {
+          const selection = new fabric.ActiveSelection(selectedObjects, {
+            canvas: this.canvas
+          });
+          this.canvas.setActiveObject(selection);
+        } else {
+          this.canvas.setActiveObject(activeObject);
+        }
+        
+        const newActive = this.canvas.getActiveObject();
+        if (newActive) {
+          newActive.setCoords();
+        }
+        
+        this.canvas.renderAll();
+      });
+    }
+    
     this._viewportState.next({
       zoom: newZoom,
       panX: this.canvas.viewportTransform![4],
@@ -199,7 +264,52 @@ export class ZoomPanService {
   zoomOut(): void {
     const currentZoom = this.canvas.getZoom();
     const newZoom = Math.max(currentZoom / 1.2, 0.1);
+    
+    // Store active selection
+    const activeObject = this.canvas.getActiveObject();
+    const selectedObjects = this.canvas.getActiveObjects();
+    
     this.canvas.setZoom(newZoom);
+    
+    // Update object coordinates after zoom
+    this.canvas.getObjects().forEach(obj => {
+      obj.setCoords();
+    });
+    
+    // Force canvas to recalculate its offset
+    (this.canvas as any).calcOffset();
+    
+    // Force update of selection controls if there's an active selection
+    if (activeObject) {
+      this.canvas.discardActiveObject();
+      
+      // Clear the top context
+      const topCtx = (this.canvas as any).contextTop;
+      if (topCtx) {
+        topCtx.clearRect(0, 0, this.canvas.width!, this.canvas.height!);
+      }
+      
+      this.canvas.renderAll();
+      
+      requestAnimationFrame(() => {
+        if (selectedObjects.length > 1) {
+          const selection = new fabric.ActiveSelection(selectedObjects, {
+            canvas: this.canvas
+          });
+          this.canvas.setActiveObject(selection);
+        } else {
+          this.canvas.setActiveObject(activeObject);
+        }
+        
+        const newActive = this.canvas.getActiveObject();
+        if (newActive) {
+          newActive.setCoords();
+        }
+        
+        this.canvas.renderAll();
+      });
+    }
+    
     this._viewportState.next({
       zoom: newZoom,
       panX: this.canvas.viewportTransform![4],
@@ -209,7 +319,51 @@ export class ZoomPanService {
   }
   
   resetZoom(): void {
+    // Store active selection
+    const activeObject = this.canvas.getActiveObject();
+    const selectedObjects = this.canvas.getActiveObjects();
+    
     this.canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    
+    // Update object coordinates after zoom reset
+    this.canvas.getObjects().forEach(obj => {
+      obj.setCoords();
+    });
+    
+    // Force canvas to recalculate its offset
+    (this.canvas as any).calcOffset();
+    
+    // Force update of selection controls if there's an active selection
+    if (activeObject) {
+      this.canvas.discardActiveObject();
+      
+      // Clear the top context
+      const topCtx = (this.canvas as any).contextTop;
+      if (topCtx) {
+        topCtx.clearRect(0, 0, this.canvas.width!, this.canvas.height!);
+      }
+      
+      this.canvas.renderAll();
+      
+      requestAnimationFrame(() => {
+        if (selectedObjects.length > 1) {
+          const selection = new fabric.ActiveSelection(selectedObjects, {
+            canvas: this.canvas
+          });
+          this.canvas.setActiveObject(selection);
+        } else {
+          this.canvas.setActiveObject(activeObject);
+        }
+        
+        const newActive = this.canvas.getActiveObject();
+        if (newActive) {
+          newActive.setCoords();
+        }
+        
+        this.canvas.renderAll();
+      });
+    }
+    
     this._viewportState.next({
       zoom: 1,
       panX: 0,
