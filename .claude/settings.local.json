@@ -4,7 +4,10 @@
       "Bash(npm run:*)",
       "Bash(npm start)",
       "Bash(npm start:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm install)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

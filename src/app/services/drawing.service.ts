@@ -155,7 +155,7 @@ export class DrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'testLine' | 'freehand'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand'
   ): void {
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
@@ -210,6 +210,9 @@ export class DrawingService {
     } else if (mode === 'ballValveFL') {
       this.lineDrawingService.setDrawingMode('idle');
       this.pipingService.startBallValveFLMode();
+    } else if ((mode as any) === 'teeJoint') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startTeeJointMode();
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
@@ -419,7 +422,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'slope' | 'testLine' | 'freehand' {
+  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;
@@ -447,6 +450,9 @@ export class DrawingService {
     }
     if (this.pipingService.isBallValveFLModeActive()) {
       return 'ballValveFL';
+    }
+    if (this.pipingService.isTeeJointModeActive()) {
+      return 'teeJoint';
     }
     if (this.isometryToolsService.isSlopeModeActive()) {
       return 'slope';
@@ -500,6 +506,9 @@ export class DrawingService {
     } else if (mode === 'ballValveFL') {
       this.lineDrawingService.setDrawingMode('idle');
       this.pipingService.startBallValveFLMode();
+    } else if ((mode as any) === 'teeJoint') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.pipingService.startTeeJointMode();
     } else if (mode === 'slope') {
       this.lineDrawingService.setDrawingMode('idle');
       this.isometryToolsService.startSlopeMode();
@@ -518,6 +527,7 @@ export class DrawingService {
       this.pipingService.stopFlowMode();
       this.pipingService.stopGateValveMode();
       this.pipingService.stopGateValveSMode();
+      this.pipingService.stopTeeJointMode();
       this.pipingService.stopGateValveFLMode();
       this.pipingService.stopGlobeValveSMode();
       this.pipingService.stopGlobeValveFLMode();

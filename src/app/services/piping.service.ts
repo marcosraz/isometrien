@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { StateManagementService } from './state-management.service';
-import { createGateValveSNew, createGateValveFLNew } from './piping-valve-helper';
+import { createGateValveSNew, createGateValveFLNew, createTeeJoint } from './piping-valve-helper';
 
 @Injectable({
   providedIn: 'root',
@@ -17,8 +17,10 @@ export class PipingService {
   private globeValveFLMode: boolean = false;
   private ballValveSMode: boolean = false;
   private ballValveFLMode: boolean = false;
+  private teeJointMode: boolean = false;
   private previewArrow: fabric.Group | null = null;
   private previewValve: fabric.Group | null = null;
+  private previewTee: fabric.Group | null = null;
   private isShiftPressed: boolean = false;
   private isCtrlPressed: boolean = false;
   private hoveredLine: fabric.Line | fabric.Path | null = null;
@@ -56,6 +58,9 @@ export class PipingService {
         } else if (this.ballValveFLMode) {
           this.stopBallValveFLMode();
           window.dispatchEvent(new CustomEvent('exitBallValveFLMode'));
+        } else if (this.teeJointMode) {
+          this.stopTeeJointMode();
+          window.dispatchEvent(new CustomEvent('exitTeeJointMode'));
         }
       }
     });
@@ -63,6 +68,15 @@ export class PipingService {
     document.addEventListener('keyup', (e) => {
       if (e.key === 'Shift') {
         this.isShiftPressed = false;
+      }
+      if (e.key === 'Control') {
+        this.isCtrlPressed = false;
+      }
+    });
+    
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Control') {
+        this.isCtrlPressed = true;
       }
     });
   }
@@ -188,7 +202,21 @@ export class PipingService {
   }
 
   public isActive(): boolean {
-    return this.flowMode || this.gateValveMode || this.gateValveSMode || this.gateValveFLMode || this.globeValveSMode || this.globeValveFLMode || this.ballValveSMode || this.ballValveFLMode;
+    return this.flowMode || this.gateValveMode || this.gateValveSMode || this.gateValveFLMode || this.globeValveSMode || this.globeValveFLMode || this.ballValveSMode || this.ballValveFLMode || this.teeJointMode;
+  }
+  
+  public startTeeJointMode(): void {
+    this.teeJointMode = true;
+  }
+  
+  public stopTeeJointMode(): void {
+    this.teeJointMode = false;
+    this.cleanupTeePreview();
+    this.resetLineHighlight();
+  }
+  
+  public isTeeJointModeActive(): boolean {
+    return this.teeJointMode;
   }
 
   private cleanupPreview(): void {
@@ -202,6 +230,13 @@ export class PipingService {
     if (this.previewValve && this.canvas) {
       this.canvas.remove(this.previewValve);
       this.previewValve = null;
+    }
+  }
+  
+  private cleanupTeePreview(): void {
+    if (this.previewTee && this.canvas) {
+      this.canvas.remove(this.previewTee);
+      this.previewTee = null;
     }
   }
 
@@ -535,8 +570,8 @@ export class PipingService {
       left: anchor1X,
       top: anchor1Y,
       radius: anchorRadius,
-      fill: 'red',
-      stroke: 'darkred',
+      fill: 'blue',
+      stroke: 'darkblue',
       strokeWidth: 1,
       opacity: anchorOpacity,
       originX: 'center',
@@ -551,8 +586,8 @@ export class PipingService {
       left: anchor2X,
       top: anchor2Y,
       radius: anchorRadius,
-      fill: 'red',
-      stroke: 'darkred',
+      fill: 'blue',
+      stroke: 'darkblue',
       strokeWidth: 1,
       opacity: anchorOpacity,
       originX: 'center',
@@ -964,7 +999,7 @@ export class PipingService {
   }
 
   public handleMouseMove(options: any): void {
-    if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode)) return;
+    if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode && !this.teeJointMode)) return;
     
     // Check Ctrl key directly from the mouse event
     if (options.e && options.e.ctrlKey !== undefined) {
@@ -1032,10 +1067,31 @@ export class PipingService {
           });
           this.canvas.add(this.previewValve);
         }
+      } else if (this.teeJointMode) {
+        // Update preview T-Stück
+        this.cleanupTeePreview();
+        
+        this.previewTee = createTeeJoint(
+          nearest.closestPoint.x, 
+          nearest.closestPoint.y, 
+          angle,
+          this.isCtrlPressed,  // Strg für Spiegelung
+          this.isShiftPressed  // Shift für Seitenwechsel
+        );
+        
+        if (this.previewTee) {
+          this.previewTee.set({
+            opacity: 0.7,
+            selectable: false,
+            evented: false
+          });
+          this.canvas.add(this.previewTee);
+        }
       }
     } else {
       this.cleanupPreview();
       this.cleanupValvePreview();
+      this.cleanupTeePreview();
       this.resetLineHighlight();
     }
     
@@ -1043,7 +1099,7 @@ export class PipingService {
   }
 
   public handleMouseDown(options: any): void {
-    if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode)) return;
+    if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode && !this.teeJointMode)) return;
     
     const pointer = this.canvas.getPointer(options.e);
     const threshold = this.isShiftPressed ? 100 : 50;
@@ -1139,11 +1195,11 @@ export class PipingService {
               const anchor1 = new fabric.Circle({
                 left: anchor1X,
                 top: anchor1Y,
-                radius: 1,  // Very small anchor points
-                fill: 'red',
-                stroke: 'darkred',
+                radius: 2,  // Etwas größer für bessere Sichtbarkeit
+                fill: 'blue',
+                stroke: 'darkblue',
                 strokeWidth: 1,
-                opacity: 0.5,
+                opacity: 0.7,
                 originX: 'center',
                 originY: 'center',
                 selectable: false,
@@ -1155,11 +1211,11 @@ export class PipingService {
               const anchor2 = new fabric.Circle({
                 left: anchor2X,
                 top: anchor2Y,
-                radius: 1,  // Very small anchor points
-                fill: 'red',
-                stroke: 'darkred',
+                radius: 2,  // Etwas größer für bessere Sichtbarkeit
+                fill: 'blue',
+                stroke: 'darkblue',
                 strokeWidth: 1,
-                opacity: 0.5,
+                opacity: 0.7,
                 originX: 'center',
                 originY: 'center',
                 selectable: false,
@@ -1181,11 +1237,11 @@ export class PipingService {
             const anchor1 = new fabric.Circle({
               left: anchor1X,
               top: anchor1Y,
-              radius: 3,
-              fill: 'red',
-              stroke: 'darkred',
+              radius: 2,
+              fill: 'blue',
+              stroke: 'darkblue',
               strokeWidth: 1,
-              opacity: 0.5,
+              opacity: 0.7,
               originX: 'center',
               originY: 'center',
               selectable: false,
@@ -1197,11 +1253,11 @@ export class PipingService {
             const anchor2 = new fabric.Circle({
               left: anchor2X,
               top: anchor2Y,
-              radius: 3,
-              fill: 'red',
-              stroke: 'darkred',
+              radius: 2,
+              fill: 'blue',
+              stroke: 'darkblue',
               strokeWidth: 1,
-              opacity: 0.5,
+              opacity: 0.7,
               originX: 'center',
               originY: 'center',
               selectable: false,
@@ -1270,11 +1326,11 @@ export class PipingService {
           const anchor1 = new fabric.Circle({
             left: anchor1X,
             top: anchor1Y,
-            radius: 1,
-            fill: 'red',
-            stroke: 'darkred',
+            radius: 2,
+            fill: 'blue',
+            stroke: 'darkblue',
             strokeWidth: 1,
-            opacity: 0.5,
+            opacity: 0.7,
             originX: 'center',
             originY: 'center',
             selectable: false,
@@ -1286,11 +1342,11 @@ export class PipingService {
           const anchor2 = new fabric.Circle({
             left: anchor2X,
             top: anchor2Y,
-            radius: 1,
-            fill: 'red',
-            stroke: 'darkred',
+            radius: 2,
+            fill: 'blue',
+            stroke: 'darkblue',
             strokeWidth: 1,
-            opacity: 0.5,
+            opacity: 0.7,
             originX: 'center',
             originY: 'center',
             selectable: false,
@@ -1413,6 +1469,56 @@ export class PipingService {
         
         // Stay in valve mode for adding more valves
         this.cleanupValvePreview();
+        this.resetLineHighlight();
+      } else if (this.teeJointMode) {
+        // Add T-Stück
+        const teeJoint = createTeeJoint(
+          nearest.closestPoint.x, 
+          nearest.closestPoint.y, 
+          angle,
+          this.isCtrlPressed,  // Strg für Spiegelung
+          this.isShiftPressed  // Shift für Seitenwechsel
+        );
+        
+        if (this.stateManagement) {
+          this.stateManagement.executeOperation('Add T-Stück', () => {
+            // Teile die Linie am T-Stück
+            this.splitLineAtValve(nearest.line, nearest.closestPoint, teeJoint, true);
+            
+            // Füge T-Stück hinzu
+            this.canvas!.add(teeJoint);
+            
+            // Füge Ankerpunkte hinzu - sie sind bereits mit absoluten Positionen erstellt
+            const anchors = (teeJoint as any).anchors;
+            if (anchors) {
+              anchors.forEach((anchor: fabric.Circle) => {
+                // Ankerpunkte haben bereits die korrekten absoluten Positionen
+                this.canvas!.add(anchor);
+              });
+            }
+            
+            this.canvas!.bringObjectToFront(teeJoint);
+            this.canvas!.requestRenderAll();
+          });
+        } else {
+          this.splitLineAtValve(nearest.line, nearest.closestPoint, teeJoint, true);
+          this.canvas.add(teeJoint);
+          
+          // Füge Ankerpunkte hinzu - sie sind bereits mit absoluten Positionen erstellt
+          const anchors = (teeJoint as any).anchors;
+          if (anchors) {
+            anchors.forEach((anchor: fabric.Circle) => {
+              // Ankerpunkte haben bereits die korrekten absoluten Positionen
+              this.canvas!.add(anchor);
+            });
+          }
+          
+          this.canvas.bringObjectToFront(teeJoint);
+          this.canvas.requestRenderAll();
+        }
+        
+        // Bleibe im T-Stück Modus
+        this.cleanupTeePreview();
         this.resetLineHighlight();
       }
     }

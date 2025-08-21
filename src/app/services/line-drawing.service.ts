@@ -21,7 +21,7 @@ export interface EditableLine {
   providedIn: 'root',
 })
 export class LineDrawingService {
-  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' = 'idle';
+  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' = 'idle';
   public lineStartPoint: { x: number; y: number } | null = null;
   public pipePoints: { x: number; y: number }[] = [];
   private previewLine: fabric.Line | null = null;
@@ -64,7 +64,7 @@ export class LineDrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand'
   ): void {
     if (this.drawingMode === 'addPipe' && mode !== 'addPipe') {
       // Aufräumen beim Verlassen des Pipe-Modus

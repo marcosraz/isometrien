@@ -285,6 +285,12 @@
       <span class="icon">➡️</span>
       <span class="label">Fließrichtung</span>
     </button>
+    <button class="context-btn" (click)="startTeeJoint()" 
+            [class.active]="drawingService.drawingMode === 'teeJoint'"
+            title="T-Stück (Strg=Spiegeln, Shift=Seite wechseln)">
+      <span class="icon">⊥</span>
+      <span class="label">T-Stück</span>
+    </button>
     
     <div class="separator"></div>
     

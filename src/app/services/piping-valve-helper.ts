@@ -134,11 +134,11 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   const anchor1 = new fabric.Circle({
     left: 0,
     top: -19,  // On the top flange line (adjusted for 55% scale)
-    radius: 1,  // Very small anchor points
-    fill: 'red',
-    stroke: 'darkred',
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
     strokeWidth: 1,
-    opacity: 0.5,
+    opacity: 0.7,  // Etwas sichtbarer
     originX: 'center',
     originY: 'center',
     selectable: false,
@@ -150,11 +150,11 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   const anchor2 = new fabric.Circle({
     left: 0,
     top: 19,  // On the bottom flange line (adjusted for 55% scale)
-    radius: 1,  // Very small anchor points
-    fill: 'red',
-    stroke: 'darkred',
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
     strokeWidth: 1,
-    opacity: 0.5,
+    opacity: 0.7,  // Etwas sichtbarer
     originX: 'center',
     originY: 'center',
     selectable: false,
@@ -164,6 +164,159 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   (anchor2 as any).isAnchor = true;
   
   (group as any).anchors = [anchor1, anchor2];
+  
+  return group;
+}
+
+export function createTeeJoint(x: number, y: number, angle: number, mirrored: boolean = false, flipped: boolean = false): any {
+  // T-Stück direkt auf der Linie platzieren
+  
+  // Länge der Liniensegmente
+  const segmentLength = 20;
+  const branchLength = 25;
+  
+  // Berechne Abzweig-Winkel (60° oder -60° je nach Seite)
+  const branchAngle = flipped ? -60 : 60;
+  
+  // Berechne Endpunkt des Abzweigs (60° Winkel von der Vertikalen)
+  const radians = ((90 + branchAngle) * Math.PI) / 180;
+  const branchEndX = branchLength * Math.cos(radians);
+  const branchEndY = branchLength * Math.sin(radians);
+  
+  // Berechne die richtige Rotation basierend auf dem Linienwinkel
+  let teeAngle = angle;
+  
+  // Mit Strg-Taste: 180° drehen (Seite wechseln in der Linie)
+  if (mirrored) {
+    teeAngle += 180;
+  }
+  
+  // Erstelle einzelne Linien OHNE Gruppe, direkt positioniert
+  const angleRad = (teeAngle * Math.PI) / 180;
+  const cos = Math.cos(angleRad);
+  const sin = Math.sin(angleRad);
+  
+  // Transformiere die Linien-Endpunkte basierend auf der Rotation
+  // Linke Linie
+  const leftStart = {
+    x: x + (-segmentLength * cos),
+    y: y + (-segmentLength * sin)
+  };
+  const leftEnd = { x: x, y: y };
+  
+  const leftLine = new fabric.Line([leftStart.x, leftStart.y, leftEnd.x, leftEnd.y], {
+    stroke: 'black',
+    strokeWidth: 2,
+    selectable: false,
+    evented: false
+  });
+  
+  // Rechte Linie
+  const rightStart = { x: x, y: y };
+  const rightEnd = {
+    x: x + (segmentLength * cos),
+    y: y + (segmentLength * sin)
+  };
+  
+  const rightLine = new fabric.Line([rightStart.x, rightStart.y, rightEnd.x, rightEnd.y], {
+    stroke: 'black',
+    strokeWidth: 2,
+    selectable: false,
+    evented: false
+  });
+  
+  // Abzweiglinie - transformiere den Endpunkt
+  const branchStart = { x: x, y: y };
+  const rotatedBranchEnd = {
+    x: x + (branchEndX * cos - branchEndY * sin),
+    y: y + (branchEndX * sin + branchEndY * cos)
+  };
+  
+  const branchLine = new fabric.Line([branchStart.x, branchStart.y, rotatedBranchEnd.x, rotatedBranchEnd.y], {
+    stroke: 'black',
+    strokeWidth: 2,
+    selectable: false,
+    evented: false
+  });
+  
+  // Erstelle eine Gruppe nur für die Selektion
+  const group = new fabric.Group([leftLine, rightLine, branchLine], {
+    selectable: true,
+    hasControls: true,
+    hasBorders: true
+  });
+  
+  (group as any).customType = 'teeJoint';
+  (group as any).teeData = {
+    position: { x, y },
+    angle: angle,
+    mirrored: mirrored,
+    flipped: flipped
+  };
+  
+  // Ankerpunkte für die drei Enden - korrekt rotiert und mit blauer Farbe
+  // Berechne rotierte Positionen für die Ankerpunkte
+  
+  // Links auf der Hauptlinie - rotiert
+  const leftAnchorPos = {
+    x: x + (-segmentLength * cos),
+    y: y + (-segmentLength * sin)
+  };
+  const anchor1 = new fabric.Circle({
+    left: leftAnchorPos.x,
+    top: leftAnchorPos.y,
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
+    strokeWidth: 1,
+    opacity: 0.7,  // Etwas sichtbarer
+    originX: 'center',
+    originY: 'center',
+    selectable: false,
+    evented: false
+  });
+  (anchor1 as any).customType = 'anchorPoint';
+  (anchor1 as any).isAnchor = true;
+  
+  // Rechts auf der Hauptlinie - rotiert
+  const rightAnchorPos = {
+    x: x + (segmentLength * cos),
+    y: y + (segmentLength * sin)
+  };
+  const anchor2 = new fabric.Circle({
+    left: rightAnchorPos.x,
+    top: rightAnchorPos.y,
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
+    strokeWidth: 1,
+    opacity: 0.7,  // Etwas sichtbarer
+    originX: 'center',
+    originY: 'center',
+    selectable: false,
+    evented: false
+  });
+  (anchor2 as any).customType = 'anchorPoint';
+  (anchor2 as any).isAnchor = true;
+  
+  // Am Ende des Abzweigs - bereits korrekt rotiert
+  const anchor3 = new fabric.Circle({
+    left: rotatedBranchEnd.x,
+    top: rotatedBranchEnd.y,
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
+    strokeWidth: 1,
+    opacity: 0.7,  // Etwas sichtbarer
+    originX: 'center',
+    originY: 'center',
+    selectable: false,
+    evented: false
+  });
+  (anchor3 as any).customType = 'anchorPoint';
+  (anchor3 as any).isAnchor = true;
+  
+  (group as any).anchors = [anchor1, anchor2, anchor3];
   
   return group;
 }
@@ -270,11 +423,11 @@ export function createGateValveSNew(x: number, y: number, angle: number, mirrore
   const anchor1 = new fabric.Circle({
     left: 0,
     top: -12,  // Moved closer to center
-    radius: 1,  // Very small anchor points
-    fill: 'red',
-    stroke: 'darkred',
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
     strokeWidth: 1,
-    opacity: 0.5,
+    opacity: 0.7,  // Etwas sichtbarer
     originX: 'center',
     originY: 'center',
     selectable: false,
@@ -286,11 +439,11 @@ export function createGateValveSNew(x: number, y: number, angle: number, mirrore
   const anchor2 = new fabric.Circle({
     left: 0,
     top: 12,  // Moved closer to center
-    radius: 1,  // Very small anchor points
-    fill: 'red',
-    stroke: 'darkred',
+    radius: 2,  // Etwas größer für bessere Sichtbarkeit
+    fill: 'blue',  // Blaue Farbe
+    stroke: 'darkblue',
     strokeWidth: 1,
-    opacity: 0.5,
+    opacity: 0.7,  // Etwas sichtbarer
     originX: 'center',
     originY: 'center',
     selectable: false,

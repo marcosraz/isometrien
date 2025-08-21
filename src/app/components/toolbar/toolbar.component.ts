@@ -269,6 +269,10 @@ export class ToolbarComponent {
   public startSlope(): void {
     this.drawingService.setDrawingMode('slope');
   }
+  
+  public startTeeJoint(): void {
+    this.drawingService.setDrawingMode('teeJoint');
+  }
 
   public toggleValves(): void {
     this.showValveTools = !this.showValveTools;
