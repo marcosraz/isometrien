@@ -267,9 +267,9 @@ export class StateManagementService {
    */
   private serializeEditableLines(): any[] {
     const lines = (this.lineDrawingService as any).editableLines || [];
-    return lines.map((line: any) => ({
+    return lines.filter((line: any) => line && line.line).map((line: any) => ({
       lineId: line.line.id || this.generateId(line.line),
-      anchorIds: line.anchors.map((a: fabric.Object) => (a as any).id || this.generateId(a))
+      anchorIds: line.anchors ? line.anchors.map((a: fabric.Object) => (a as any).id || this.generateId(a)) : []
     }));
   }
   
@@ -278,9 +278,9 @@ export class StateManagementService {
    */
   private serializeEditablePipes(): any[] {
     const pipes = (this.lineDrawingService as any).editablePipes || [];
-    return pipes.map((pipe: any) => ({
+    return pipes.filter((pipe: any) => pipe && pipe.path).map((pipe: any) => ({
       pathId: pipe.path.id || this.generateId(pipe.path),
-      anchorIds: pipe.anchors.map((a: fabric.Object) => (a as any).id || this.generateId(a))
+      anchorIds: pipe.anchors ? pipe.anchors.map((a: fabric.Object) => (a as any).id || this.generateId(a)) : []
     }));
   }
   

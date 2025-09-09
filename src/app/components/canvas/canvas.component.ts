@@ -28,7 +28,6 @@ import { KeyboardShortcutsService } from '../../services/keyboard-shortcuts.serv
 export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('htmlCanvas') htmlCanvas!: ElementRef<HTMLCanvasElement>;
   private canvas!: fabric.Canvas;
-  private _keyDownHandler: (event: KeyboardEvent) => void;
   private _resizeHandler: () => void;
   private redrawSubscription!: Subscription;
   private subscriptions = new Subscription();
@@ -49,94 +48,10 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
     private keyboardShortcutsService: KeyboardShortcutsService
   ) {
     this._resizeHandler = () => {}; // Will be initialized in ngAfterViewInit
-    this._keyDownHandler = (event: KeyboardEvent) => {
-      const activeObject = this.canvas?.getActiveObject();
-
-      // Check if text is being edited (either directly or within a group)
-      let isTextEditing = false;
-      if (activeObject) {
-        if (activeObject.type === 'i-text' && (activeObject as fabric.IText).isEditing) {
-          isTextEditing = true;
-        } else if (activeObject.type === 'group') {
-          // Check if any text object within the group is being edited
-          const group = activeObject as fabric.Group;
-          group.forEachObject((obj: fabric.Object) => {
-            if (obj.type === 'i-text' && (obj as fabric.IText).isEditing) {
-              isTextEditing = true;
-            }
-          });
-        }
-      }
-
-      if (isTextEditing) {
-        if (event.key === 'Backspace' || event.key === 'Delete') {
-          // Prevent the event from bubbling up to the global handler
-          event.stopPropagation();
-        }
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        this.drawingService.cancelDrawing();
-        this.weldingService.handleKeyDown(event);
-        // Stelle sicher, dass Ankerpunkte nach ESC sichtbar bleiben
-        this.dimensionService.ensureAnchorsAlwaysVisible(this.canvas);
-      } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        this.stateManagement.executeOperation('Delete Objects', () => {
-          this.drawingService.deleteSelectedObjects();
-        });
-      } else if (event.ctrlKey && event.key === 'z') {
-        event.preventDefault();
-        this.stateManagement.undo();
-      } else if (event.ctrlKey && event.key === 'y') {
-        event.preventDefault();
-        this.stateManagement.redo();
-      } else if (event.key === 'g' || event.key === 'G') {
-        // Toggle grid with G key
-        this.gridService.toggleGrid();
-      } else if (event.key === '+' || event.key === '=') {
-        // Zoom in with + key
-        this.zoomPanService.zoomIn();
-      } else if (event.key === '-' || event.key === '_') {
-        // Zoom out with - key
-        this.zoomPanService.zoomOut();
-      } else if (event.key === '0' && event.ctrlKey) {
-        // Reset zoom with Ctrl+0
-        event.preventDefault();
-        this.zoomPanService.resetZoom();
-      } else if (event.key === 'f' || event.key === 'F') {
-        // Fit to screen with F key
-        this.zoomPanService.zoomToFit();
-      } else if (event.key === 'l' || event.key === 'L') {
-        // Line drawing mode with L key
-        this.drawingService.setDrawingMode('addLine');
-      } else if (event.key === 'p' || event.key === 'P') {
-        // Pipe drawing mode with P key  
-        this.drawingService.setDrawingMode('addPipe');
-      } else if (event.key === 'd' || event.key === 'D') {
-        // ISO Dimension mode with D key
-        this.drawingService.startIsoDimensioning();
-      } else if (event.key === 't' || event.key === 'T') {
-        // Text mode with T key
-        this.drawingService.setDrawingMode('text');
-      } else if (event.altKey && event.key === '1') {
-        // Drawing color mode with Alt+1
-        event.preventDefault();
-        this.drawingService.setColorMode('drawing');
-      } else if (event.altKey && event.key === '2') {
-        // Black/White mode with Alt+2
-        event.preventDefault();
-        this.drawingService.setColorMode('blackwhite');
-      } else if (event.altKey && event.key === '3') {
-        // Norm color mode with Alt+3
-        event.preventDefault();
-        this.drawingService.setColorMode('norm');
-      }
-    };
   }
 
   ngOnInit(): void {
-    document.addEventListener('keydown', this._keyDownHandler);
+    // Note: KeyboardShortcutsService will be enabled after canvas initialization in ngAfterViewInit
     
     // Subscribe to viewport changes
     this.subscriptions.add(
@@ -162,7 +77,8 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    document.removeEventListener('keydown', this._keyDownHandler);
+    // Disable keyboard shortcuts service when component is destroyed
+    this.keyboardShortcutsService.disable();
     window.removeEventListener('resize', this._resizeHandler);
     this.subscriptions.unsubscribe();
     this.redrawSubscription?.unsubscribe();
@@ -187,6 +103,8 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
         skipTargetFind: false,
       });
       
+      console.log('Canvas created:', !!this.canvas);
+      
       // Resize canvas when window resizes
       this._resizeHandler = () => {
         const newWidth = container?.clientWidth || window.innerWidth - 260;
@@ -198,6 +116,8 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
         this.canvas.requestRenderAll();
       };
       window.addEventListener('resize', this._resizeHandler);
+      
+      console.log('About to set canvas in DrawingService, canvas exists:', !!this.canvas);
       this.drawingService.setCanvas(this.canvas);
       this.stateManagement.setCanvas(this.canvas);
       
@@ -206,6 +126,12 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
       
       // Initialize grid service
       this.gridService.initializeCanvas(this.canvas);
+      
+      // Enable keyboard shortcuts AFTER canvas is initialized
+      // The service will now handle canvas availability checks internally
+      this.keyboardShortcutsService.enable();
+      console.log('KeyboardShortcutsService enabled after canvas initialization');
+      
       this.canvas.on('mouse:down', (options) => {
         this.drawingService.handleMouseDown(options);
       });

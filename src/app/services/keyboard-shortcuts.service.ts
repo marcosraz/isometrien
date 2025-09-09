@@ -20,7 +20,8 @@ interface ShortcutHandler {
 })
 export class KeyboardShortcutsService {
   private shortcuts: ShortcutHandler[] = [];
-  private isEnabled = true;
+  private isEnabled = false;
+  private keydownListener: ((event: KeyboardEvent) => void) | null = null;
 
   constructor(
     private drawingService: DrawingService,
@@ -29,8 +30,8 @@ export class KeyboardShortcutsService {
     private exportService: ExportService,
     private zoomPanService: ZoomPanService
   ) {
+    // Don't setup listeners in constructor - wait for enable() to be called
     this.registerShortcuts();
-    this.setupKeyboardListener();
   }
 
   private registerShortcuts(): void {
@@ -39,22 +40,40 @@ export class KeyboardShortcutsService {
       {
         key: 'Escape',
         description: 'Exit current mode',
-        handler: () => this.drawingService.setDrawingMode('idle')
+        handler: () => {
+          this.drawingService.setDrawingMode('idle');
+          // Ensure anchor points remain visible after ESC
+          const canvas = this.drawingService.getCanvas();
+          if (canvas) {
+            canvas.getObjects().forEach(obj => {
+              if ((obj as any).isAnchor) {
+                obj.set({ visible: true });
+              }
+            });
+            canvas.requestRenderAll();
+          }
+        }
       },
       {
         key: 'l',
         description: 'Line drawing mode',
-        handler: () => this.drawingService.setDrawingMode('addLine')
+        handler: () => {
+          // Don't check canvas here - let DrawingService handle it
+          this.drawingService.setDrawingMode('addLine');
+        }
       },
       {
         key: 'p',
         description: 'Pipe drawing mode',
-        handler: () => this.drawingService.setDrawingMode('addPipe')
+        handler: () => {
+          // Don't check canvas here - let DrawingService handle it
+          this.drawingService.setDrawingMode('addPipe');
+        }
       },
       {
         key: 'd',
         description: 'Dimension mode',
-        handler: () => this.drawingService.setDrawingMode('dimension')
+        handler: () => this.drawingService.startIsoDimensioning()
       },
       {
         key: 't',
@@ -188,7 +207,8 @@ export class KeyboardShortcutsService {
   }
 
   private setupKeyboardListener(): void {
-    document.addEventListener('keydown', (event: KeyboardEvent) => {
+    // Create the event listener function
+    this.keydownListener = (event: KeyboardEvent) => {
       if (!this.isEnabled) return;
       
       // Skip if user is typing in an input field
@@ -202,22 +222,36 @@ export class KeyboardShortcutsService {
         return;
       }
       
+      // Debug logging
+      console.log('Key pressed:', event.key, 'Ctrl:', event.ctrlKey, 'Shift:', event.shiftKey, 'Alt:', event.altKey);
+      
       // Find matching shortcut
       const shortcut = this.shortcuts.find(s => {
         const keyMatch = s.key.toLowerCase() === event.key.toLowerCase();
-        const ctrlMatch = s.ctrl === undefined || s.ctrl === event.ctrlKey;
-        const shiftMatch = s.shift === undefined || s.shift === event.shiftKey;
-        const altMatch = s.alt === undefined || s.alt === event.altKey;
+        // Only check modifiers if they are explicitly required
+        const ctrlMatch = !s.ctrl || (s.ctrl === event.ctrlKey);
+        const shiftMatch = !s.shift || (s.shift === event.shiftKey);
+        const altMatch = !s.alt || (s.alt === event.altKey);
         
-        return keyMatch && ctrlMatch && shiftMatch && altMatch;
+        // For shortcuts without modifiers, ensure no modifiers are pressed
+        const noUnwantedModifiers = s.ctrl || s.shift || s.alt || 
+          (!event.ctrlKey && !event.shiftKey && !event.altKey);
+        
+        return keyMatch && ctrlMatch && shiftMatch && altMatch && noUnwantedModifiers;
       });
       
       if (shortcut) {
+        console.log('Executing shortcut:', shortcut.description);
         event.preventDefault();
         event.stopPropagation();
         shortcut.handler();
+      } else {
+        console.log('No matching shortcut found for key:', event.key);
       }
-    });
+    };
+    
+    // Add the event listener
+    document.addEventListener('keydown', this.keydownListener);
   }
 
   private deleteSelectedObjects(): void {
@@ -247,11 +281,29 @@ export class KeyboardShortcutsService {
   }
 
   public enable(): void {
+    console.log('Enabling KeyboardShortcutsService');
+    
+    // Don't check canvas here - it might not be ready yet
+    // Instead, check when shortcuts are actually executed
     this.isEnabled = true;
+    
+    // Setup listener if not already setup
+    if (!this.keydownListener) {
+      this.setupKeyboardListener();
+      console.log('Keyboard shortcuts listener registered');
+    }
   }
 
   public disable(): void {
+    console.log('Disabling KeyboardShortcutsService');
     this.isEnabled = false;
+    
+    // Remove event listener if it exists
+    if (this.keydownListener) {
+      document.removeEventListener('keydown', this.keydownListener);
+      this.keydownListener = null;
+      console.log('Keyboard shortcuts listener removed');
+    }
   }
 
   public getShortcuts(): ShortcutHandler[] {

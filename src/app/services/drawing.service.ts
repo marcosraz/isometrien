@@ -13,6 +13,9 @@ import { RenderSchedulerService } from './render-scheduler.service';
 import { FreehandDrawingService } from './freehand-drawing.service';
 import { BehaviorSubject } from 'rxjs';
 
+// Global counter to track DrawingService instances
+let instanceCounter = 0;
+
 @Injectable({
   providedIn: 'root',
 })
@@ -20,6 +23,7 @@ export class DrawingService {
   private redrawRequest = new BehaviorSubject<void>(undefined);
   redraw$ = this.redrawRequest.asObservable();
   private canvas!: fabric.Canvas;
+  private instanceId: number;
   
   // Color mode management
   public colorMode: 'drawing' | 'blackwhite' | 'norm' = 'drawing';
@@ -69,6 +73,8 @@ export class DrawingService {
     private renderScheduler: RenderSchedulerService,
     public freehandDrawingService: FreehandDrawingService
   ) {
+    this.instanceId = ++instanceCounter;
+    console.log(`DrawingService instance #${this.instanceId} created`);
     // Connect state management to services
     this.lineDrawingService.setStateManagement(this.stateManagementService);
     this.dimensionService.setStateManagement(this.stateManagementService);
@@ -84,6 +90,7 @@ export class DrawingService {
   }
 
   public setCanvas(canvas: fabric.Canvas): void {
+    console.log(`DrawingService #${this.instanceId}.setCanvas called with canvas:`, !!canvas);
     this.canvas = canvas;
     this.lineDrawingService.setCanvas(canvas);
     this.weldingService.setCanvas(canvas);
@@ -91,6 +98,7 @@ export class DrawingService {
     this.isometryToolsService.setCanvas(canvas);
     this.exportService.initializeCanvas(canvas);
     this.freehandDrawingService.setCanvas(canvas);
+    console.log(`DrawingService #${this.instanceId} canvas is now set:`, !!this.canvas);
   }
 
   public requestRedraw(): void {
@@ -98,6 +106,7 @@ export class DrawingService {
   }
 
   public getCanvas(): fabric.Canvas {
+    console.log(`DrawingService #${this.instanceId}.getCanvas called, canvas exists:`, !!this.canvas);
     return this.canvas;
   }
 
@@ -136,6 +145,10 @@ export class DrawingService {
   }
   
   public startIsoDimensioning(): void {
+    if (!this.canvas) {
+      console.warn('Canvas not ready, cannot start ISO dimensioning');
+      return;
+    }
     this.lineDrawingService.setDrawingMode('dimension');
     this.dimensionService.startIsoDimensioning();
     this.canvas.discardActiveObject();
@@ -157,6 +170,14 @@ export class DrawingService {
   public setDrawingMode(
     mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand'
   ): void {
+    console.log(`DrawingService #${this.instanceId}.setDrawingMode called with:`, mode);
+    console.log(`DrawingService #${this.instanceId} Canvas available:`, !!this.canvas);
+    
+    // If canvas is not ready yet, just return
+    if (!this.canvas) {
+      console.warn('Canvas not ready, cannot set drawing mode');
+      return;
+    }
     // Stop dimension mode if it was active and we're switching to a different mode
     if (this.lineDrawingService.drawingMode === 'dimension' && mode !== 'dimension') {
       if (this.canvas) {
@@ -222,6 +243,7 @@ export class DrawingService {
       this.lineDrawingService.setDrawingMode('idle');
       this.freehandDrawingService.startFreehandDrawing();
     } else {
+      console.log('Entering else clause for mode:', mode);
       this.weldingService.stopWeldstamp();
       this.weldingService.stopWelderStamp();
       this.weldingService.stopWelderStampEmpty();
@@ -239,7 +261,9 @@ export class DrawingService {
       this.pipingService.stopBallValveFLMode();
       this.isometryToolsService.stopSlopeMode();
       this.freehandDrawingService.stopFreehandDrawing();
+      console.log('Calling lineDrawingService.setDrawingMode with:', mode);
       this.lineDrawingService.setDrawingMode(mode);
+      console.log('lineDrawingService.drawingMode is now:', this.lineDrawingService.drawingMode);
     }
   }
 

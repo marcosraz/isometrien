@@ -14,13 +14,8 @@ import { ObjectManagementService } from './services/object-management.service';
   imports: [CommonModule, CanvasComponent, ToolbarComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
-  providers: [
-    DrawingService,
-    IsometryService,
-    LineDrawingService,
-    DimensionService,
-    ObjectManagementService
-  ],
+  // REMOVED providers - services are already providedIn: 'root'
+  // Having them here creates duplicate instances!
 })
 export class AppComponent {
   title = 'isometrics-app';
