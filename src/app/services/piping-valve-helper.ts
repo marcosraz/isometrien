@@ -1,4 +1,5 @@
 import * as fabric from 'fabric';
+import { CustomLine } from './custom-line.class';
 
 export function createGateValveFLNew(x: number, y: number, angle: number, mirrored: boolean = false): any {
   // Gate Valve FL variant with flange lines
@@ -204,11 +205,13 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   };
   const leftEnd = { x: x, y: y };
   
-  const leftLine = new fabric.Line([leftStart.x, leftStart.y, leftEnd.x, leftEnd.y], {
+  const leftLine = new CustomLine([leftStart.x, leftStart.y, leftEnd.x, leftEnd.y], {
     stroke: 'black',
     strokeWidth: 2,
     selectable: false,
-    evented: false
+    evented: false,
+    hasControls: true,
+    hasBorders: false
   });
   
   // Rechte Linie
@@ -218,11 +221,13 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
     y: y + (segmentLength * sin)
   };
   
-  const rightLine = new fabric.Line([rightStart.x, rightStart.y, rightEnd.x, rightEnd.y], {
+  const rightLine = new CustomLine([rightStart.x, rightStart.y, rightEnd.x, rightEnd.y], {
     stroke: 'black',
     strokeWidth: 2,
     selectable: false,
-    evented: false
+    evented: false,
+    hasControls: true,
+    hasBorders: false
   });
   
   // Abzweiglinie - transformiere den Endpunkt
@@ -232,11 +237,13 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
     y: y + (branchEndX * sin + branchEndY * cos)
   };
   
-  const branchLine = new fabric.Line([branchStart.x, branchStart.y, rotatedBranchEnd.x, rotatedBranchEnd.y], {
+  const branchLine = new CustomLine([branchStart.x, branchStart.y, rotatedBranchEnd.x, rotatedBranchEnd.y], {
     stroke: 'black',
     strokeWidth: 2,
     selectable: false,
-    evented: false
+    evented: false,
+    hasControls: true,
+    hasBorders: false
   });
   
   // Erstelle eine Gruppe nur für die Selektion

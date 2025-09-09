@@ -6,65 +6,137 @@ import * as fabric from 'fabric';
 })
 export class ZoomSelectionFixService {
   
+  private static debugMode = false;
+  
+  /**
+   * Enable/disable debug logging
+   */
+  public static setDebugMode(enabled: boolean): void {
+    this.debugMode = enabled;
+    console.log(`Zoom Selection Fix Debug Mode: ${enabled ? 'ON' : 'OFF'}`);
+  }
+  
   /**
    * Install zoom fix on a canvas
    */
   public static installZoomFix(canvas: fabric.Canvas): void {
-    // Override the zoomToPoint method
-    const originalZoomToPoint = canvas.zoomToPoint.bind(canvas);
+    console.log('Installing Zoom Selection Fix v4 (fixed)...');
     
-    canvas.zoomToPoint = function(point: fabric.Point, value: number) {
-      // Store active selection
-      const activeObject = this.getActiveObject();
-      const selectedObjects = this.getActiveObjects();
+    // Make debug controls available globally
+    (window as any).zoomDebug = {
+      enable: () => this.setDebugMode(true),
+      disable: () => this.setDebugMode(false),
+      getSelection: () => canvas.getActiveObject(),
+      updateCoords: () => {
+        canvas.getObjects().forEach(obj => obj.setCoords());
+        const active = canvas.getActiveObject();
+        if (active) {
+          active.setCoords();
+          canvas.requestRenderAll();
+        }
+        console.log('Manually updated all coordinates');
+      },
+      getZoom: () => canvas.getZoom(),
+      setZoom: (zoom: number) => canvas.setZoom(zoom),
+      clearSelection: () => {
+        canvas.discardActiveObject();
+        canvas.requestRenderAll();
+      }
+    };
+    
+    console.log('Debug controls available via window.zoomDebug');
+    
+    // Store original methods - IMPORTANT: bind them to canvas!
+    const originalZoomToPoint = canvas.zoomToPoint.bind(canvas);
+    const originalSetZoom = canvas.setZoom.bind(canvas);
+    const originalSetViewportTransform = canvas.setViewportTransform.bind(canvas);
+    
+    // Helper function to update everything after zoom
+    const updateAfterZoom = () => {
+      // Force canvas to recalculate its offset
+      (canvas as any).calcOffset();
       
-      // Call original zoom
-      originalZoomToPoint(point, value);
-      
-      // CRITICAL: Force canvas to recalculate its offset
-      (this as any).calcOffset();
-      
-      // Update all object coordinates after zoom
-      this.getObjects().forEach((obj: fabric.FabricObject) => {
+      // Update all object coordinates
+      canvas.getObjects().forEach((obj: fabric.FabricObject) => {
         obj.setCoords();
       });
       
-      // Handle selection differently
+      // Update active object if exists
+      const activeObject = canvas.getActiveObject();
       if (activeObject) {
-        // Clear selection
-        this.discardActiveObject();
+        activeObject.setCoords();
         
-        // Clear the selection layer
-        const contextTop = (this as any).contextTop;
-        if (contextTop) {
-          contextTop.clearRect(0, 0, this.width!, this.height!);
+        // For groups and active selections
+        if (activeObject.type === 'activeSelection' || activeObject.type === 'group') {
+          const group = activeObject as fabric.ActiveSelection | fabric.Group;
+          group.getObjects().forEach(obj => {
+            obj.setCoords();
+          });
         }
         
-        // Render without selection
-        this.renderAll();
-        
-        // Re-select with longer delay to ensure zoom is fully applied
-        setTimeout(() => {
-          if (selectedObjects.length > 1) {
-            const selection = new fabric.ActiveSelection(selectedObjects, {
-              canvas: this
-            });
-            this.setActiveObject(selection);
-          } else {
-            this.setActiveObject(activeObject);
-          }
-          
-          // Update coordinates again after selection
-          const newActive = this.getActiveObject();
-          if (newActive) {
-            newActive.setCoords();
-          }
-          
-          this.renderAll();
-        }, 50); // Increased delay
+        if (this.debugMode) {
+          const bounds = activeObject.getBoundingRect();
+          console.log('Zoom applied, selection updated:', {
+            zoom: canvas.getZoom(),
+            bounds: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+          });
+        }
       }
       
-      return this;
+      // Request render
+      canvas.requestRenderAll();
     };
+    
+    // Override zoomToPoint - CRITICAL: must preserve canvas context
+    canvas.zoomToPoint = function(this: fabric.Canvas, point: fabric.Point, value: number) {
+      if (ZoomSelectionFixService.debugMode) {
+        console.log('zoomToPoint called:', { point: { x: point.x, y: point.y }, zoom: value });
+      }
+      
+      // Call original with preserved context
+      const result = originalZoomToPoint.call(this, point, value);
+      
+      // Update after zoom
+      updateAfterZoom();
+      
+      return result;
+    };
+    
+    // Override setZoom
+    canvas.setZoom = function(this: fabric.Canvas, value: number) {
+      if (ZoomSelectionFixService.debugMode) {
+        console.log('setZoom called:', { zoom: value });
+      }
+      
+      // Call original with preserved context
+      const result = originalSetZoom.call(this, value);
+      
+      // Update after zoom
+      updateAfterZoom();
+      
+      return result;
+    };
+    
+    // Override setViewportTransform for zoomToFit (F key)
+    canvas.setViewportTransform = function(this: fabric.Canvas, vpt: fabric.TMat2D) {
+      if (ZoomSelectionFixService.debugMode) {
+        console.log('setViewportTransform called:', { 
+          zoom: vpt[0], 
+          panX: vpt[4], 
+          panY: vpt[5] 
+        });
+      }
+      
+      // Call original with preserved context
+      const result = originalSetViewportTransform.call(this, vpt);
+      
+      // Update after transform
+      updateAfterZoom();
+      
+      return result;
+    };
+    
+    console.log('Zoom Selection Fix v4 installed successfully!');
+    console.log('Override methods attached with proper context binding');
   }
 }

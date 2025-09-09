@@ -39,12 +39,23 @@ export class KeyboardShortcutsService {
     this.shortcuts = [
       {
         key: 'Escape',
-        description: 'Exit current mode',
+        description: 'Exit current mode and clear selection',
         handler: () => {
           this.drawingService.setDrawingMode('idle');
-          // Ensure anchor points remain visible after ESC
+          // Clear any active selection
           const canvas = this.drawingService.getCanvas();
           if (canvas) {
+            // Clear selection first - use both methods to ensure it works
+            canvas.discardActiveObject();
+            canvas.selection = true; // Re-enable selection
+            
+            // Clear the selection layer explicitly
+            if ((canvas as any).contextTop) {
+              const ctx = (canvas as any).contextTop as CanvasRenderingContext2D;
+              ctx.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+            }
+            
+            // Ensure anchor points remain visible after ESC
             canvas.getObjects().forEach(obj => {
               if ((obj as any).isAnchor) {
                 obj.set({ visible: true });
