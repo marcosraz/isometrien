@@ -1,0 +1,81 @@
+// Essential fixes for T-piece and valve movement
+// This file contains the key changes needed to fix the movement functionality
+
+// 1. Add tracking variables after line 55:
+private mouseStartT: number = 0;  // Position der Maus auf der Linie beim Start des Ziehens
+private componentInitialT: number = 0;  // Initiale Position der Komponente auf der Linie
+
+// 2. In updateMovingComponent method (around line 1677), replace the t calculation:
+// OLD:
+// const t = Math.max(0, Math.min(1, 
+//   (toMouse.x * lineVector.x + toMouse.y * lineVector.y) / (lineLength * lineLength)
+// ));
+
+// NEW:
+// Berechne die aktuelle Mausposition auf der Linie
+const currentMouseT = (toMouse.x * lineVector.x + toMouse.y * lineVector.y) / (lineLength * lineLength);
+// Berechne das Delta zwischen aktueller und Start-Mausposition
+const deltaT = currentMouseT - this.mouseStartT;
+// Neue Position = initiale Position + Delta (begrenzt auf 0-1)
+const t = Math.max(0, Math.min(1, this.componentInitialT + deltaT));
+
+// 3. Fix T-piece anchor positioning (around line 1736):
+// Replace the entire if (customType === 'teeJoint') block with:
+if (customType === 'teeJoint') {
+  // T-Stück hat 3 Ankerpunkte:
+  // Index 0 und 1: An den Enden der Linie entlang
+  // Index 2: Senkrecht zur Linie (das eigentliche T)
+  let offsetX = 0;
+  let offsetY = 0;
+  
+  if (index === 0) {
+    // Erster Ankerpunkt: Entlang der Linie nach hinten
+    const lineAngle = angle * Math.PI / 180;
+    offsetX = Math.cos(lineAngle) * distance * -1;
+    offsetY = Math.sin(lineAngle) * distance * -1;
+  } else if (index === 1) {
+    // Zweiter Ankerpunkt: Entlang der Linie nach vorne
+    const lineAngle = angle * Math.PI / 180;
+    offsetX = Math.cos(lineAngle) * distance;
+    offsetY = Math.sin(lineAngle) * distance;
+  } else if (index === 2) {
+    // Dritter Ankerpunkt: Senkrecht zur Linie (das T)
+    const perpAngle = (angle + 90) * Math.PI / 180;
+    offsetX = Math.cos(perpAngle) * distance;
+    offsetY = Math.sin(perpAngle) * distance;
+  }
+  
+  anchor.set({
+    left: newX + offsetX,
+    top: newY + offsetY
+  });
+}
+
+// 4. In handleMovePipeMouseDown (around line 1863), add tracking initialization:
+// After line: this.moveStartPoint = { x: pointer.x, y: pointer.y };
+// Add this block:
+const hostLine = (this.movingComponent as any).hostLine;
+const linePosition = (this.movingComponent as any).linePosition;
+
+if (hostLine && linePosition !== undefined) {
+  const line = hostLine as fabric.Line;
+  const lineVector = {
+    x: line.x2! - line.x1!,
+    y: line.y2! - line.y1!
+  };
+  const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
+  
+  if (lineLength > 0) {
+    // Speichere initiale Position der Komponente
+    this.componentInitialT = linePosition;
+    
+    // Berechne die aktuelle Mausposition auf der Linie
+    const toMouse = {
+      x: pointer.x - line.x1!,
+      y: pointer.y - line.y1!
+    };
+    this.mouseStartT = (toMouse.x * lineVector.x + toMouse.y * lineVector.y) / (lineLength * lineLength);
+    
+    console.log(`Start moving component - Initial t: ${this.componentInitialT}, Mouse start t: ${this.mouseStartT}`);
+  }
+}
