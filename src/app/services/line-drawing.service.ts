@@ -1838,7 +1838,14 @@ export class LineDrawingService {
       const dy = point.y - yy;
       const distance = Math.sqrt(dx * dx + dy * dy);
       
-      return distance < 10; // Toleranz von 10 Pixeln
+      // Prüfe ob die Linie horizontal oder vertikal ist
+      const isHorizontal = Math.abs(y2 - y1) < 0.01;
+      const isVertical = Math.abs(x2 - x1) < 0.01;
+      
+      // Erhöhe die Toleranz leicht für horizontale und vertikale Linien
+      const tolerance = (isHorizontal || isVertical) ? 14 : 10;
+      
+      return distance < tolerance;
     }
     
     // Für Pfade (Bögen) vereinfachte Näherungsprüfung
