@@ -13,6 +13,12 @@ import { RenderSchedulerService } from './render-scheduler.service';
 import { FreehandDrawingService } from './freehand-drawing.service';
 import { BehaviorSubject } from 'rxjs';
 
+// Central type for all drawing modes
+export type DrawingMode = 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 
+  'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 
+  'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 
+  'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' | 'movePipe';
+
 // Global counter to track DrawingService instances
 let instanceCounter = 0;
 
@@ -87,6 +93,9 @@ export class DrawingService {
     // Connect drawing service for color management
     this.lineDrawingService.setDrawingService(this);
     this.isometryToolsService.setDrawingService(this);
+    
+    // Connect piping service to line drawing service for pipe segment tracking
+    this.pipingService.setLineDrawingService(this.lineDrawingService);
   }
 
   public setCanvas(canvas: fabric.Canvas): void {
@@ -167,9 +176,7 @@ export class DrawingService {
     this.lineDrawingService.setDrawingMode('text');
   }
 
-  public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand'
-  ): void {
+  public setDrawingMode(mode: DrawingMode): void {
     console.log(`DrawingService #${this.instanceId}.setDrawingMode called with:`, mode);
     console.log(`DrawingService #${this.instanceId} Canvas available:`, !!this.canvas);
     
@@ -282,6 +289,12 @@ export class DrawingService {
       this.isometryToolsService.handleMouseDown(this.canvas, options);
       return;
     }
+    
+    // Handle Move Pipe Mode
+    if (this.lineDrawingService.drawingMode === 'movePipe') {
+      this.lineDrawingService.handleMovePipeMouseDown(this.canvas, options);
+      return;
+    }
 
     // Check if freehand mode is active
     if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
@@ -319,6 +332,14 @@ export class DrawingService {
     this.lineDrawingService.handlePipeMouseDown(this.canvas, options);
   }
 
+  public handleMouseUp(options: any): void {
+    // Handle Move Pipe Mode
+    if (this.lineDrawingService.drawingMode === 'movePipe') {
+      this.lineDrawingService.handleMovePipeMouseUp(this.canvas, options);
+      return;
+    }
+  }
+
   public handleMouseMove(options: any): void {
     if (this.weldingService.isActive()) {
       this.weldingService.handleMouseMove(options);
@@ -332,6 +353,12 @@ export class DrawingService {
     
     if (this.isometryToolsService.isSlopeModeActive()) {
       this.isometryToolsService.handleMouseMove(this.canvas, options);
+      return;
+    }
+    
+    // Handle Move Pipe Mode
+    if (this.lineDrawingService.drawingMode === 'movePipe') {
+      this.lineDrawingService.handleMovePipeMouseMove(this.canvas, options);
       return;
     }
 
@@ -446,7 +473,7 @@ export class DrawingService {
   }
 
   // Getter for drawing mode to maintain compatibility
-  public get drawingMode(): 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' {
+  public get drawingMode(): DrawingMode {
     const weldingMode = this.weldingService.getActiveMode();
     if (weldingMode) {
       return weldingMode;

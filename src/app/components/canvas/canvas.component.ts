@@ -138,6 +138,9 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
       this.canvas.on('mouse:move', (options) => {
         this.drawingService.handleMouseMove(options);
       });
+      this.canvas.on('mouse:up', (options) => {
+        this.drawingService.handleMouseUp(options);
+      });
       this.canvas.on('mouse:dblclick', (options) => {
         this.drawingService.handleDoubleClick(
           options as fabric.TEvent<MouseEvent>

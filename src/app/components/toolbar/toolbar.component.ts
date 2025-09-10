@@ -152,6 +152,15 @@ export class ToolbarComponent {
     this.drawingService.pipePoints = [];
   }
 
+  public startMovePipe(): void {
+    this.drawingService.setDrawingMode('movePipe' as any);
+    console.log('Move Pipe Modus aktiviert');
+  }
+  
+  public isMovePipeActive(): boolean {
+    return (this.drawingService.drawingMode as string) === 'movePipe';
+  }
+
   public groupSelectedObjects(): void {
     this.drawingService.groupSelectedObjects();
     this.drawingService.requestRedraw();

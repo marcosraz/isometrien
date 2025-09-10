@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import * as fabric from 'fabric';
 import { StateManagementService } from './state-management.service';
 import { createGateValveSNew, createGateValveFLNew, createTeeJoint } from './piping-valve-helper';
+import { LineDrawingService } from './line-drawing.service';
 
 @Injectable({
   providedIn: 'root',
@@ -9,6 +10,7 @@ import { createGateValveSNew, createGateValveFLNew, createTeeJoint } from './pip
 export class PipingService {
   private canvas: fabric.Canvas | null = null;
   private stateManagement: StateManagementService | null = null;
+  private lineDrawingService: LineDrawingService | null = null;
   private flowMode: boolean = false;
   private gateValveMode: boolean = false;
   private gateValveSMode: boolean = false;
@@ -101,6 +103,10 @@ export class PipingService {
 
   public isFlowModeActive(): boolean {
     return this.flowMode;
+  }
+  
+  public setLineDrawingService(lineDrawingService: LineDrawingService): void {
+    this.lineDrawingService = lineDrawingService;
   }
 
   public startGateValveMode(): void {
@@ -256,12 +262,67 @@ export class PipingService {
     let minDistance = Infinity;
     let closestPoint = { x: 0, y: 0 };
     
+    // DEBUGGING: Log all lines found on canvas for analysis
+    console.log('🔍 DEBUGGING: findNearestLine called at point:', point);
+    console.log('🔍 Total objects on canvas:', this.canvas.getObjects().length);
+    
+    let lineCount = 0;
+    this.canvas.getObjects().forEach(obj => {
+      if (obj.type === 'line' || obj.type === 'path') {
+        lineCount++;
+      }
+    });
+    console.log('🔍 Total lines/paths found:', lineCount);
+    
+    // Sammle zuerst alle validen Linien und deren Punkte
+    const candidateLines: Array<{
+      line: fabric.Line | fabric.Path;
+      closestPoint: { x: number; y: number };
+      distance: number;
+      originalDistance: number;
+      isSelectable: boolean;
+      isMainPipeLine: boolean;
+      hasMouseEvents: boolean;
+      debugInfo: any;
+    }> = [];
+    
     this.canvas.getObjects().forEach(obj => {
       if (obj.type === 'line' || obj.type === 'path') {
         const line = obj as fabric.Line | fabric.Path;
         
         // Skip dimension lines and other non-pipe/line elements
         if ((line as any).isDimensionPart) return;
+        
+        // REFINED BLACKLIST: Nur spezifische problematische Linien ausschließen
+        const stroke = line.stroke as string;
+        
+        // 1. GRÜNE AUSWAHL-HIGHLIGHTS (nur helle/neon grüne)
+        if (stroke && (stroke === '#00ff00' || stroke === '#00FF00' || stroke.toLowerCase() === 'lime')) {
+          return; // Skip bright green selection lines
+        }
+        
+        // 2. SEHR TRANSPARENTE PREVIEW LINIEN  
+        if (line.opacity !== undefined && line.opacity < 0.3) {
+          return; // Skip very transparent temporary lines
+        }
+        
+        // 3. NUR SELECTION-HELPER LINIEN (sehr spezifisch)
+        if (line.selectable && line.evented && line.hasControls && 
+            (line.strokeWidth && line.strokeWidth > 4)) {
+          return; // Skip thick interactive selection helpers only
+        }
+        
+        // Klassifiziere Linien für bessere Auswahl
+        const isSelectable = line.selectable === true || line.evented === true;
+        
+        // Zusätzliche Kriterien für problematische Linien
+        const hasMouseEvents = line.hasControls || line.hasBorders;
+        const isHighlighted = (line.stroke as string) === '#00ff00' || (line.strokeWidth && line.strokeWidth > 3);
+        const isTemporary = line.opacity !== undefined && line.opacity < 1.0;
+        
+        // Erkenne echte Pipe-Linien vs. Auswahl-/Highlight-Linien
+        const isPipeColor = (line.stroke as string) === '#000000' || (line.stroke as string) === 'black' || !line.stroke;
+        const isMainPipeLine = isPipeColor && !isHighlighted && !isTemporary && line.strokeWidth <= 2;
         
         let point1, point2;
         
@@ -280,15 +341,188 @@ export class PipingService {
         const cp = this.getClosestPointOnLineSegment(point, point1, point2);
         const dist = this.getDistance(point, cp);
         
-        if (dist < minDistance && dist < 50) { // 50px threshold for snapping
-          minDistance = dist;
-          closestLine = line;
-          closestPoint = cp;
+        if (dist < 50) { // 50px threshold for snapping
+          // DEBUGGING: Log detailed info about each candidate line
+          const stroke = line.stroke as string;
+          const debugInfo = {
+            type: line.type,
+            stroke: stroke,
+            strokeWidth: line.strokeWidth,
+            opacity: line.opacity,
+            selectable: line.selectable,
+            evented: line.evented,
+            hasControls: line.hasControls,
+            hasBorders: line.hasBorders,
+            visible: line.visible,
+            left: line.left,
+            top: line.top,
+            width: line.width,
+            height: line.height,
+            propertyCount: Object.keys(line).length,
+            customProperties: Object.keys(line).filter(key => key.startsWith('custom') || key.includes('selection') || key.includes('highlight')),
+            allProperties: Object.keys(line),
+            distance: dist
+          };
+          
+          console.log(`🔍 Candidate line ${candidateLines.length + 1}:`, debugInfo);
+          
+          // DRASTISCHE DISTANCE-MANIPULATION: Echte Pipe-Linien bekommen künstlichen Vorteil
+          let adjustedDistance = dist;
+          
+          // Erkenne echte Pipe-Linien noch strikter
+          const isRealPipeLine = (
+            (stroke === '#000000' || stroke === 'black' || stroke === '#000' || !stroke) &&
+            (!line.strokeWidth || line.strokeWidth <= 2) &&
+            !line.selectable && !line.evented &&
+            !line.hasControls && !line.hasBorders &&
+            (!line.opacity || line.opacity === 1.0)
+          );
+          
+          if (isRealPipeLine) {
+            // Echte Pipe-Linien bekommen 50% Distanz-Bonus (werden bevorzugt)
+            adjustedDistance = dist * 0.5;
+          } else if (isSelectable || hasMouseEvents) {
+            // Selectable Linien bekommen 200% Distanz-Strafe (werden benachteiligt)  
+            adjustedDistance = dist * 2.0;
+          } else if (stroke === '#00ff00' || (line.strokeWidth && line.strokeWidth > 3)) {
+            // Offensichtliche Highlight-Linien bekommen massive Strafe
+            adjustedDistance = dist * 10.0;
+          }
+          
+          candidateLines.push({
+            line: line,
+            closestPoint: cp,
+            distance: adjustedDistance, // Verwende die manipulierte Distanz
+            originalDistance: dist,     // Behalte die echte Distanz für den Rückgabewert
+            isSelectable: isSelectable,
+            isMainPipeLine: isMainPipeLine,
+            hasMouseEvents: hasMouseEvents,
+            debugInfo: debugInfo
+          });
         }
       }
     });
     
-    return closestLine ? { line: closestLine, closestPoint, distance: minDistance } : null;
+    // Wenn wir mehrere Kandidaten haben, wähle die nächste Linie,
+    // aber vermeide parallele Linien die durch frühere Ventile/T-Stücke entstanden sind
+    if (candidateLines.length > 0) {
+      // SPEZIELLER FIX FÜR SCHRÄGE LINIEN
+      // Bei schrägen Linien sind Auswahllinien und echte Linien oft sehr nah beieinander
+      
+      // Schritt 1: ULTRA-STRIKTE Kriterien für echte Pipe-Linien
+      // Besonders wichtig bei schrägen Linien wo Auswahllinien sehr nah sind
+      const strictMainPipeLines = candidateLines.filter(c => {
+        const line = c.line;
+        const stroke = line.stroke as string;
+        
+        // KORRIGIERTE Kriterien für echte Pipe-Linien basierend auf Debug-Daten
+        // Echte Pipe-Linien haben oft grüne Farben wie '#4CAF50', nicht schwarz!
+        const isPipeStroke = stroke === '#4CAF50' || stroke === 'rgba(102, 153, 255, 0.75)' || 
+                           stroke === '#000000' || stroke === 'black' || stroke === '#000' || !stroke || stroke === 'rgba(0,0,0,1)';
+        const hasNormalWidth = !line.strokeWidth || line.strokeWidth <= 3; // Erweitert auf 3px
+        const notHighlightGreen = stroke !== '#00ff00' && stroke !== 'green' && stroke !== 'rgb(0,255,0)' && stroke !== 'lime';
+        
+        // KRITISCHE KORREKTUR: Echte Pipe-Linien können selectable sein!
+        // Wir unterscheiden zwischen echten Pipes und Auswahllinien anhand der Farbe
+        const isRealPipe = (stroke === '#4CAF50' || stroke === 'rgba(102, 153, 255, 0.75)') && line.selectable === true;
+        const isNonSelectableValidPipe = !line.selectable && (stroke === '#000000' || stroke === 'black' || stroke === '#000' || !stroke);
+        const isValidPipeLine = isRealPipe || isNonSelectableValidPipe;
+        
+        const isOpaque = !line.opacity || line.opacity >= 0.75; // Erweitert für semi-transparente echte Linien
+        const noSpecialProps = !(line as any).isSelectionHelper && !(line as any).isHighlight;
+        
+        // Ausschließen von reinen Auswahllinien (grün + selectable ohne Pipe-Farbe)
+        const notPureSelectionLine = !(stroke === 'green' && line.selectable === true);
+        
+        console.log(`🔍 Checking REVISED strict criteria for line with stroke: ${stroke}, selectable: ${line.selectable}`, {
+          isPipeStroke, hasNormalWidth, notHighlightGreen, isRealPipe, isNonSelectableValidPipe, isValidPipeLine, isOpaque, noSpecialProps, notPureSelectionLine
+        });
+        
+        return isPipeStroke && hasNormalWidth && notHighlightGreen && isValidPipeLine && isOpaque && noSpecialProps && notPureSelectionLine;
+      });
+      
+      // STRIKTE REGEL: Falls wir echte Pipe-Linien haben, akzeptiere NUR diese!
+      if (strictMainPipeLines.length > 0) {
+        console.log('🔍 STRICT PIPE LINES FOUND:', strictMainPipeLines.length);
+        strictMainPipeLines.forEach((line, index) => {
+          console.log(`🔍 Strict line ${index + 1}:`, line.debugInfo);
+        });
+        
+        strictMainPipeLines.sort((a, b) => a.distance - b.distance);
+        // Verwende AUSSCHLIESSLICH echte Pipe-Linien - ignoriere alle anderen
+        const bestStrictLine = strictMainPipeLines[0];
+        console.log('🎯 SELECTED STRICT LINE:', bestStrictLine.debugInfo);
+        
+        return {
+          line: bestStrictLine.line,
+          closestPoint: bestStrictLine.closestPoint,
+          distance: bestStrictLine.originalDistance // Verwende echte Distanz für Rückgabe
+        };
+      } else {
+        console.log('⚠️ NO STRICT PIPE LINES FOUND! Falling back to regular selection.');
+        console.log('🔍 All candidate lines:', candidateLines.length);
+        candidateLines.forEach((line, index) => {
+          console.log(`🔍 Fallback line ${index + 1}:`, line.debugInfo);
+        });
+      }
+      
+      // Schritt 2: Standard-Prioritätssystem
+      const mainPipeLines = candidateLines.filter(c => c.isMainPipeLine);
+      const nonSelectableLines = candidateLines.filter(c => !c.isSelectable && !c.hasMouseEvents);
+      
+      // Schritt 3: Standard-Fallback falls keine strikten Pipe-Linien gefunden
+      // (Dieser Code wird nur erreicht wenn KEINE strikten Pipe-Linien vorhanden sind)
+      let workingSet;
+      if (mainPipeLines.length > 0) {
+        workingSet = mainPipeLines;
+        // console.log('Using main pipe lines:', mainPipeLines.length);
+      } else if (nonSelectableLines.length > 0) {
+        workingSet = nonSelectableLines;
+        // console.log('Using non-selectable lines:', nonSelectableLines.length);
+      } else {
+        workingSet = candidateLines;
+        // console.log('Using all candidate lines:', candidateLines.length);
+      }
+      
+      // Sortiere nach Distanz
+      workingSet.sort((a, b) => a.distance - b.distance);
+      
+      // Wähle die nächste Linie aus dem working set
+      const best = workingSet[0];
+      
+      // Wenn es sehr nahe parallele Linien gibt (typisch für geteilte Linien),
+      // prüfe ob eine davon die "Original-Linie" ist
+      if (workingSet.length > 1) {
+        const threshold = 5; // Pixel Toleranz für parallele Linien
+        const parallelCandidates = workingSet.filter(c => 
+          Math.abs(c.distance - best.distance) < threshold
+        );
+        
+        if (parallelCandidates.length > 1) {
+          // Bevorzuge Linien die NICHT als Split-Segment markiert sind
+          const nonSplitLine = parallelCandidates.find(c => 
+            !(c.line as any).isSplitPipeSegment
+          );
+          
+          if (nonSplitLine) {
+            return {
+              line: nonSplitLine.line,
+              closestPoint: nonSplitLine.closestPoint,
+              distance: nonSplitLine.originalDistance || nonSplitLine.distance // Verwende echte Distanz wenn verfügbar
+            };
+          }
+        }
+      }
+      
+      console.log('🎯 FINAL SELECTION (fallback):', best.debugInfo);
+      return {
+        line: best.line,
+        closestPoint: best.closestPoint,
+        distance: best.originalDistance || best.distance // Verwende echte Distanz wenn verfügbar
+      };
+    }
+    
+    return null;
   }
 
   private getClosestPointOnLineSegment(point: { x: number; y: number }, lineStart: { x: number; y: number }, lineEnd: { x: number; y: number }): { x: number; y: number } {
@@ -1138,6 +1372,10 @@ export class PipingService {
           gateValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
           valveType = 'Gate Valve S';
           
+          // Füge eine eindeutige ID zum Ventil hinzu
+          const componentId = `valve_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          (gateValve as any).customId = componentId;
+          
           // Calculate anchor positions based on line angle
           const normalizedAngle = ((angle % 360) + 360) % 360;
           const distance = 16; // Distance from valve center - optimal position
@@ -1186,9 +1424,11 @@ export class PipingService {
             anchor2Y = nearest.closestPoint.y + distance * Math.sin(rad);
           }
           
-          // S variant doesn't split the line, just sits on top
+          // S variant also splits the line with smaller gap
           if (this.stateManagement) {
             this.stateManagement.executeOperation(`Add ${valveType}`, () => {
+              // Split the line for S variant with smaller gap (false = 30px gap)
+              this.splitLineAtValve(nearest.line, nearest.closestPoint, gateValve, false);
               this.canvas!.add(gateValve);
               
               // Add anchors as separate objects at the correct positions
@@ -1207,6 +1447,7 @@ export class PipingService {
               } as any);
               (anchor1 as any).customType = 'anchorPoint';
               (anchor1 as any).isAnchor = true;
+              (anchor1 as any).componentId = componentId;
               
               const anchor2 = new fabric.Circle({
                 left: anchor2X,
@@ -1223,14 +1464,22 @@ export class PipingService {
               } as any);
               (anchor2 as any).customType = 'anchorPoint';
               (anchor2 as any).isAnchor = true;
+              (anchor2 as any).componentId = componentId;
+              
+              // Store anchors in valve for movement
+              (gateValve as any).anchors = [anchor1, anchor2];
               
               this.canvas!.add(anchor1);
               this.canvas!.add(anchor2);
               
               this.canvas!.bringObjectToFront(gateValve);
+              this.canvas!.bringObjectToFront(anchor1);
+              this.canvas!.bringObjectToFront(anchor2);
               this.canvas!.requestRenderAll();
             });
           } else {
+            // Split the line for S variant with smaller gap (false = 30px gap)
+            this.splitLineAtValve(nearest.line, nearest.closestPoint, gateValve, false);
             this.canvas.add(gateValve);
             
             // Add anchors as separate objects at the correct positions
@@ -1249,6 +1498,7 @@ export class PipingService {
             } as any);
             (anchor1 as any).customType = 'anchorPoint';
             (anchor1 as any).isAnchor = true;
+            (anchor1 as any).componentId = componentId;
             
             const anchor2 = new fabric.Circle({
               left: anchor2X,
@@ -1265,16 +1515,26 @@ export class PipingService {
             } as any);
             (anchor2 as any).customType = 'anchorPoint';
             (anchor2 as any).isAnchor = true;
+            (anchor2 as any).componentId = componentId;
+            
+            // Store anchors in valve for movement
+            (gateValve as any).anchors = [anchor1, anchor2];
             
             this.canvas.add(anchor1);
             this.canvas.add(anchor2);
             
             this.canvas.bringObjectToFront(gateValve);
+            this.canvas.bringObjectToFront(anchor1);
+            this.canvas.bringObjectToFront(anchor2);
             this.canvas.requestRenderAll();
           }
         } else if (this.gateValveFLMode) {
           gateValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
           valveType = 'Gate Valve FL';
+          
+          // Füge eine eindeutige ID zum Ventil hinzu
+          const componentId = `valve_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          (gateValve as any).customId = componentId;
           
           // Calculate anchor positions for FL variant - at flange positions
           const normalizedAngle = ((angle % 360) + 360) % 360;
@@ -1338,6 +1598,7 @@ export class PipingService {
           });
           (anchor1 as any).customType = 'anchorPoint';
           (anchor1 as any).isAnchor = true;
+          (anchor1 as any).componentId = componentId;
           
           const anchor2 = new fabric.Circle({
             left: anchor2X,
@@ -1354,6 +1615,10 @@ export class PipingService {
           });
           (anchor2 as any).customType = 'anchorPoint';
           (anchor2 as any).isAnchor = true;
+          (anchor2 as any).componentId = componentId;
+          
+          // Store anchors in valve for movement
+          (gateValve as any).anchors = [anchor1, anchor2];
           
           // FL variant splits the line
           if (this.stateManagement) {
@@ -1480,6 +1745,10 @@ export class PipingService {
           this.isShiftPressed  // Shift für Seitenwechsel
         );
         
+        // Füge eine eindeutige ID zum T-Stück hinzu
+        const componentId = `tee_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        (teeJoint as any).customId = componentId;
+        
         if (this.stateManagement) {
           this.stateManagement.executeOperation('Add T-Stück', () => {
             // Teile die Linie am T-Stück
@@ -1492,6 +1761,8 @@ export class PipingService {
             const anchors = (teeJoint as any).anchors;
             if (anchors) {
               anchors.forEach((anchor: fabric.Circle) => {
+                // Verknüpfe Ankerpunkt mit T-Stück über componentId
+                (anchor as any).componentId = componentId;
                 // Ankerpunkte haben bereits die korrekten absoluten Positionen
                 this.canvas!.add(anchor);
               });
@@ -1508,6 +1779,8 @@ export class PipingService {
           const anchors = (teeJoint as any).anchors;
           if (anchors) {
             anchors.forEach((anchor: fabric.Circle) => {
+              // Verknüpfe Ankerpunkt mit T-Stück über componentId
+              (anchor as any).componentId = componentId;
               // Ankerpunkte haben bereits die korrekten absoluten Positionen
               this.canvas!.add(anchor);
             });
@@ -1561,10 +1834,44 @@ export class PipingService {
         evented: l.evented
       });
       
-      // Copy any custom properties
+      // Copy any custom properties from original line
       if ((line as any).isDimensionPart) {
         (line1 as any).isDimensionPart = true;
         (line2 as any).isDimensionPart = true;
+      }
+      
+      // Wichtig: Markiere die neuen Linien als geteilte Pipe-Segmente
+      (line1 as any).isSplitPipeSegment = true;
+      (line2 as any).isSplitPipeSegment = true;
+      (line1 as any).originalPipeId = (line as any).pipeId || (line as any).originalPipeId;
+      (line2 as any).originalPipeId = (line as any).pipeId || (line as any).originalPipeId;
+      
+      // Speichere die Linien als verbunden mit dem Ventil/T-Stück
+      if (!(valve as any).connectedLines) {
+        (valve as any).connectedLines = [];
+      }
+      (valve as any).connectedLines.push(line1, line2);
+      
+      // Speichere die Host-Linie und Position für das Ventil/T-Stück
+      // Die Komponente liegt genau in der Mitte zwischen den beiden neuen Linien
+      (valve as any).hostLine = line1; // Wir verwenden die erste Linie als Referenz
+      (valve as any).linePosition = 1.0; // Am Ende der ersten Linie
+      
+      // Finde die EditablePipe zu dieser Linie und aktualisiere sie
+      const pipes = this.lineDrawingService?.getEditablePipes() || [];
+      for (const pipe of pipes) {
+        if (pipe.segments) {
+          const segmentIndex = pipe.segments.indexOf(line);
+          if (segmentIndex !== -1) {
+            // Ersetze das ursprüngliche Segment mit den zwei neuen
+            pipe.segments.splice(segmentIndex, 1, line1, line2);
+            
+            // Markiere die Pipe-ID auf den neuen Linien
+            (line1 as any).pipeId = (pipe as any).id;
+            (line2 as any).pipeId = (pipe as any).id;
+            break;
+          }
+        }
       }
       
       // Remove original line and add new ones
@@ -1574,6 +1881,11 @@ export class PipingService {
       
       // Store references in valve for potential reconnection
       (valve as any).connectedLines = [line1, line2];
+      (valve as any).originalLine = line;
+      
+      // Speichere Referenz zum Ventil auf den Linien
+      (line1 as any).connectedValve = valve;
+      (line2 as any).connectedValve = valve;
     }
     // For paths, we would need more complex splitting logic
   }

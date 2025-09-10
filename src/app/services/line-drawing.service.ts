@@ -21,7 +21,7 @@ export interface EditableLine {
   providedIn: 'root',
 })
 export class LineDrawingService {
-  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' = 'idle';
+  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe' = 'idle';
   public lineStartPoint: { x: number; y: number } | null = null;
   public pipePoints: { x: number; y: number }[] = [];
   private previewLine: fabric.Line | null = null;
@@ -36,6 +36,23 @@ export class LineDrawingService {
   private anchorPreview: fabric.Circle | null = null;
   private highlightedAnchor: fabric.Object | null = null;
   private originalAnchorColor: string | null = null;
+  private highlightedComponent: fabric.Group | null = null;
+  private originalComponentStroke: string | null = null;
+  private movingComponent: fabric.Group | null = null;
+
+  // Move Mode Variablen
+  private highlightedSegment: fabric.Object | null = null;
+  private originalSegmentStroke: string | null = null;
+  private movingSegment: fabric.Object | null = null;
+  private movingPipe: EditablePipe | null = null;
+  private movingSegmentIndex: number = -1;
+  private moveStartPoint: { x: number; y: number } | null = null;
+  // Endpunkt-Verschiebung
+  private movingAnchor: fabric.Circle | null = null;
+  private movingAnchorIndex: number = -1;
+  private originalAnchorFill: string | null = null;
+  // Associated valves and T-pieces that need to move with segments
+  private associatedComponents: fabric.Group[] = [];
 
   private stateManagement: StateManagementService | null = null;
   private drawingService: any = null;
@@ -64,7 +81,7 @@ export class LineDrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe'
   ): void {
     if (this.drawingMode === 'addPipe' && mode !== 'addPipe') {
       // Aufräumen beim Verlassen des Pipe-Modus
@@ -941,6 +958,18 @@ export class LineDrawingService {
       if (index > -1) pipe.anchors.splice(index, 1);
     });
     
+    // Aktualisiere die Positionen der transparenten Hauptankerpunkte
+    const transparentAnchors = pipe.anchors.filter(a => (a as any).fill === 'transparent');
+    transparentAnchors.forEach((anchor, index) => {
+      if (index < pipe.mainPoints.length) {
+        anchor.set({
+          left: pipe.mainPoints[index].x,
+          top: pipe.mainPoints[index].y
+        });
+        anchor.setCoords();
+      }
+    });
+    
     // Neuzeichnen basierend auf mainPoints
     const radius = 20;
     
@@ -1412,5 +1441,1022 @@ export class LineDrawingService {
     
     canvas.add(this.previewLine);
     canvas.requestRenderAll();
+  }
+
+  // ============= Move Mode Methods =============
+  
+  public handleMovePipeMouseMove(canvas: fabric.Canvas, options: any): void {
+    if (!canvas) return;
+    
+    const pointer = canvas.getPointer(options.e);
+    
+    // Wenn wir gerade eine Komponente (T-Stück/Ventil) verschieben
+    if (this.movingComponent && this.moveStartPoint) {
+      this.updateMovingComponent(canvas, pointer);
+      return;
+    }
+    
+    // Wenn wir gerade einen Ankerpunkt verschieben
+    if (this.movingAnchor && this.movingPipe && this.moveStartPoint) {
+      this.updateMovingAnchor(canvas, pointer);
+      return;
+    }
+    
+    // Wenn wir gerade ein Segment verschieben, update die Position
+    if (this.movingSegment && this.moveStartPoint) {
+      this.updateMovingSegment(canvas, pointer);
+      return;
+    }
+    
+    // Sonst highlighte das Element unter der Maus
+    this.highlightSegmentUnderMouse(canvas, pointer);
+  }
+  
+  private highlightSegmentUnderMouse(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    // Reset vorheriges Segment-Highlight
+    if (this.highlightedSegment && this.originalSegmentStroke) {
+      this.highlightedSegment.set('stroke', this.originalSegmentStroke);
+      this.highlightedSegment = null;
+      this.originalSegmentStroke = null;
+    }
+    
+    // Reset vorheriges Anker-Highlight
+    if (this.highlightedAnchor && this.originalAnchorColor) {
+      this.highlightedAnchor.set('fill', this.originalAnchorColor);
+      this.highlightedAnchor = null;
+      this.originalAnchorColor = null;
+    }
+    
+    // Reset vorheriges Komponenten-Highlight
+    if (this.highlightedComponent && this.originalComponentStroke) {
+      const objects = (this.highlightedComponent as fabric.Group).getObjects();
+      objects.forEach(obj => {
+        if ((obj as any).originalStroke) {
+          obj.set('stroke', (obj as any).originalStroke);
+          delete (obj as any).originalStroke;
+        }
+      });
+      this.highlightedComponent = null;
+      this.originalComponentStroke = null;
+    }
+    
+    // Prüfe zuerst T-Stücke und Ventile (höchste Priorität für direktes Verschieben)
+    let foundComponent = false;
+    canvas.getObjects().forEach(obj => {
+      if (!foundComponent && obj.type === 'group') {
+        const customType = (obj as any).customType;
+        if (customType === 'teeJoint' || customType === 'gateValveS' || customType === 'gateValveFL' || 
+            customType === 'globeValveS' || customType === 'globeValveFL' ||
+            customType === 'ballValveS' || customType === 'ballValveFL') {
+          
+          const componentX = obj.left || 0;
+          const componentY = obj.top || 0;
+          const distance = Math.sqrt(
+            Math.pow(pointer.x - componentX, 2) + 
+            Math.pow(pointer.y - componentY, 2)
+          );
+          
+          if (distance < 15) { // 15 Pixel Toleranz für Komponenten
+            // Highlighte die Komponente
+            this.highlightedComponent = obj as fabric.Group;
+            const objects = (obj as fabric.Group).getObjects();
+            objects.forEach(innerObj => {
+              if (innerObj.stroke) {
+                (innerObj as any).originalStroke = innerObj.stroke;
+                innerObj.set('stroke', '#00ff00'); // Grün für Highlight
+              }
+            });
+            canvas.requestRenderAll();
+            foundComponent = true;
+          }
+        }
+      }
+    });
+    
+    if (foundComponent) return;
+    
+    // Dann prüfe Ankerpunkte (zweite Priorität)
+    for (const pipe of this.editablePipes) {
+      // Nur transparente Ankerpunkte (Hauptankerpunkte) sind verschiebbar
+      const transparentAnchors = pipe.anchors.filter(a => (a as any).fill === 'transparent');
+      for (let i = 0; i < transparentAnchors.length; i++) {
+        const anchor = transparentAnchors[i];
+        const distance = Math.sqrt(
+          Math.pow(pointer.x - anchor.left!, 2) + 
+          Math.pow(pointer.y - anchor.top!, 2)
+        );
+        
+        if (distance < 10) { // 10 Pixel Toleranz
+          // Highlighte den Ankerpunkt
+          this.highlightedAnchor = anchor;
+          this.originalAnchorColor = anchor.get('fill') as string;
+          anchor.set('fill', '#00ff00'); // Grün für Highlight
+          canvas.requestRenderAll();
+          return;
+        }
+      }
+    }
+    
+    // Wenn kein Ankerpunkt, prüfe ALLE Linien und Pfade (nicht nur die in EditablePipes)
+    const objects = canvas.getObjects();
+    for (const obj of objects) {
+      // Ignoriere Dimensionslinien und andere spezielle Objekte
+      if ((obj as any).isDimensionPart || (obj as any).isWeldPoint) {
+        continue;
+      }
+      
+      if ((obj.type === 'line' || obj.type === 'path') && this.isPointNearLine(pointer, obj)) {
+        // Prüfe erst ob es Teil einer EditablePipe ist
+        let isPipeSegment = false;
+        for (const pipe of this.editablePipes) {
+          const segmentIndex = pipe.segments.indexOf(obj as any);
+          if (segmentIndex !== -1) {
+            isPipeSegment = true;
+            break;
+          }
+        }
+        
+        // Wenn es kein Pipe-Segment ist, könnte es eine durch Ventil/T-Stück geteilte Linie sein
+        // Diese sind trotzdem verschiebbar
+        if (!isPipeSegment && obj.type === 'line') {
+          // Prüfe ob es eine normale Linie ist (nicht Teil einer Gruppe oder speziellen Komponente)
+          const line = obj as fabric.Line;
+          // Zusätzliche Prüfung: Ist es eine sichtbare, selektierbare Linie?
+          if (line.visible !== false && line.selectable !== false) {
+            // Highlighte die Linie
+            this.highlightedSegment = obj;
+            this.originalSegmentStroke = obj.get('stroke') as string;
+            obj.set('stroke', '#00ff00'); // Grün für Highlight
+            canvas.requestRenderAll();
+            return;
+          }
+        } else if (isPipeSegment) {
+          // Highlighte das Pipe-Segment
+          this.highlightedSegment = obj;
+          this.originalSegmentStroke = obj.get('stroke') as string;
+          obj.set('stroke', '#00ff00'); // Grün für Highlight
+          canvas.requestRenderAll();
+          return;
+        }
+      }
+    }
+    
+    canvas.requestRenderAll();
+  }
+  
+  private findHostLineForComponent(canvas: fabric.Canvas, component: fabric.Group): void {
+    const componentX = component.left || 0;
+    const componentY = component.top || 0;
+    let closestLine: fabric.Line | null = null;
+    let closestDistance = Infinity;
+    let closestT = 0.5;
+    
+    // Suche die nächste Linie
+    canvas.getObjects().forEach(obj => {
+      if (obj.type === 'line' && !(obj as any).isDimensionPart) {
+        const line = obj as fabric.Line;
+        
+        // Skip grüne Auswahllinien
+        if (line.stroke === '#00ff00') {
+          return;
+        }
+        
+        // Skip sehr transparente Linien
+        if (line.opacity !== undefined && line.opacity < 0.5) {
+          return;
+        }
+        
+        // Berechne die Position auf der Linie, die dem Komponenten-Mittelpunkt am nächsten ist
+        const lineVector = {
+          x: line.x2! - line.x1!,
+          y: line.y2! - line.y1!
+        };
+        const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
+        
+        if (lineLength > 0) {
+          // Vektor vom Linienanfang zur Komponente
+          const toComponent = {
+            x: componentX - line.x1!,
+            y: componentY - line.y1!
+          };
+          
+          // Projiziere auf die Linie
+          const t = Math.max(0, Math.min(1, 
+            (toComponent.x * lineVector.x + toComponent.y * lineVector.y) / (lineLength * lineLength)
+          ));
+          
+          // Berechne den nächsten Punkt auf der Linie
+          const nearestX = line.x1! + t * lineVector.x;
+          const nearestY = line.y1! + t * lineVector.y;
+          
+          // Distanz zur Komponente
+          const distance = Math.sqrt(
+            Math.pow(componentX - nearestX, 2) + 
+            Math.pow(componentY - nearestY, 2)
+          );
+          
+          // Komponente sollte sehr nah an der Linie sein (max 5 Pixel Abstand)
+          if (distance < closestDistance && distance < 5) {
+            closestDistance = distance;
+            closestLine = line;
+            closestT = t;
+          }
+        }
+      }
+    });
+    
+    if (closestLine) {
+      (component as any).hostLine = closestLine;
+      (component as any).linePosition = closestT;
+      console.log(`Found host line for component, position: ${closestT}, distance: ${closestDistance}`);
+    } else {
+      console.log('No suitable host line found for component');
+    }
+  }
+  
+  private updateMovingComponent(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    if (!this.movingComponent || !this.moveStartPoint) return;
+    
+    const hostLine = (this.movingComponent as any).hostLine;
+    
+    if (!hostLine || hostLine.type !== 'line') {
+      // Wenn keine Host-Linie vorhanden, versuche sie zu finden
+      this.findHostLineForComponent(canvas, this.movingComponent);
+      return;
+    }
+    
+    const line = hostLine as fabric.Line;
+    
+    // Berechne die neue Position auf der Linie basierend auf der Mausposition
+    const lineVector = {
+      x: line.x2! - line.x1!,
+      y: line.y2! - line.y1!
+    };
+    const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
+    
+    if (lineLength === 0) return;
+    
+    // Vektor vom Linienanfang zur Mausposition
+    const toMouse = {
+      x: pointer.x - line.x1!,
+      y: pointer.y - line.y1!
+    };
+    
+    // Projiziere auf die Linie (begrenzt auf 0-1)
+    const t = Math.max(0, Math.min(1, 
+      (toMouse.x * lineVector.x + toMouse.y * lineVector.y) / (lineLength * lineLength)
+    ));
+    
+    // Berechne die neue Position auf der Linie
+    const newX = line.x1! + t * lineVector.x;
+    const newY = line.y1! + t * lineVector.y;
+    
+    // Setze die neue Position
+    this.movingComponent.set({
+      left: newX,
+      top: newY
+    });
+    this.movingComponent.setCoords();
+    
+    // Speichere die neue Position auf der Linie
+    (this.movingComponent as any).linePosition = t;
+    
+    // Bewege auch die Ankerpunkte der Komponente
+    const anchors = (this.movingComponent as any).anchors;
+    const customType = (this.movingComponent as any).customType;
+    
+    if (anchors && Array.isArray(anchors)) {
+      // Berechne den Winkel der Linie
+      const angle = Math.atan2(lineVector.y, lineVector.x) * 180 / Math.PI;
+      
+      anchors.forEach((anchor: fabric.Circle, index: number) => {
+        if (anchor && anchor.left !== undefined && anchor.top !== undefined) {
+          const distance = 15; // Standard-Abstand der Ankerpunkte
+          
+          if (customType === 'teeJoint') {
+            // T-Stück Ankerpunkte senkrecht zur Linie
+            const perpAngle = (angle + 90) * Math.PI / 180;
+            const offsetX = Math.cos(perpAngle) * distance * (index === 0 ? 1 : -1);
+            const offsetY = Math.sin(perpAngle) * distance * (index === 0 ? 1 : -1);
+            
+            anchor.set({
+              left: newX + offsetX,
+              top: newY + offsetY
+            });
+          } else {
+            // Ventil-Ankerpunkte entlang der Linie
+            const lineAngle = angle * Math.PI / 180;
+            const offsetX = Math.cos(lineAngle) * distance * (index === 0 ? -1 : 1);
+            const offsetY = Math.sin(lineAngle) * distance * (index === 0 ? -1 : 1);
+            
+            anchor.set({
+              left: newX + offsetX,
+              top: newY + offsetY
+            });
+          }
+          anchor.setCoords();
+        }
+      });
+    }
+    
+    // Für T-Stücke: Suche auch nach Ankerpunkten über componentId
+    const componentId = (this.movingComponent as any).id || (this.movingComponent as any).customId;
+    if (componentId) {
+      canvas.getObjects().forEach(obj => {
+        if (obj.type === 'circle' && (obj as any).isAnchor && 
+            (obj as any).componentId === componentId) {
+          const circle = obj as fabric.Circle;
+          const anchorIndex = (circle as any).anchorIndex || 0;
+          const distance = 15;
+          
+          if (customType === 'teeJoint') {
+            // T-Stück Ankerpunkte senkrecht zur Linie
+            const angle = Math.atan2(lineVector.y, lineVector.x);
+            const perpAngle = angle + Math.PI / 2;
+            const offsetX = Math.cos(perpAngle) * distance * (anchorIndex === 0 ? 1 : -1);
+            const offsetY = Math.sin(perpAngle) * distance * (anchorIndex === 0 ? 1 : -1);
+            
+            circle.set({
+              left: newX + offsetX,
+              top: newY + offsetY
+            });
+          } else {
+            // Ventil-Ankerpunkte entlang der Linie
+            const angle = Math.atan2(lineVector.y, lineVector.x);
+            const offsetX = Math.cos(angle) * distance * (anchorIndex === 0 ? -1 : 1);
+            const offsetY = Math.sin(angle) * distance * (anchorIndex === 0 ? -1 : 1);
+            
+            circle.set({
+              left: newX + offsetX,
+              top: newY + offsetY
+            });
+          }
+          circle.setCoords();
+        }
+      });
+    }
+    
+    canvas.requestRenderAll();
+  }
+  
+  private isPointNearLine(point: { x: number; y: number }, line: fabric.Object): boolean {
+    if (line.type === 'line') {
+      const l = line as fabric.Line;
+      const x1 = l.x1!;
+      const y1 = l.y1!;
+      const x2 = l.x2!;
+      const y2 = l.y2!;
+      
+      // Berechne Distanz vom Punkt zur Linie
+      const A = point.x - x1;
+      const B = point.y - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+      
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      let param = -1;
+      
+      if (lenSq !== 0) {
+        param = dot / lenSq;
+      }
+      
+      let xx, yy;
+      
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+      }
+      
+      const dx = point.x - xx;
+      const dy = point.y - yy;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      return distance < 10; // Toleranz von 10 Pixeln
+    }
+    
+    // Für Pfade (Bögen) vereinfachte Näherungsprüfung
+    if (line.type === 'path') {
+      const bounds = line.getBoundingRect();
+      return point.x >= bounds.left - 10 && 
+             point.x <= bounds.left + bounds.width + 10 &&
+             point.y >= bounds.top - 10 && 
+             point.y <= bounds.top + bounds.height + 10;
+    }
+    
+    return false;
+  }
+  
+  public handleMovePipeMouseDown(canvas: fabric.Canvas, options: any): void {
+    const pointer = canvas.getPointer(options.e);
+    
+    // Prüfe zuerst ob eine Komponente (T-Stück/Ventil) gehighlighted ist
+    if (this.highlightedComponent) {
+      this.movingComponent = this.highlightedComponent;
+      this.moveStartPoint = { x: pointer.x, y: pointer.y };
+      
+      // Finde die Host-Linie für diese Komponente
+      const hostLine = (this.movingComponent as any).hostLine;
+      const linePosition = (this.movingComponent as any).linePosition;
+      
+      if (hostLine && linePosition !== undefined) {
+        console.log(`Start moving component on line, position: ${linePosition}`);
+      } else {
+        console.log('Component has no host line stored, finding it now...');
+        // Finde die nächste Linie für diese Komponente
+        this.findHostLineForComponent(canvas, this.movingComponent);
+      }
+      
+      // Deaktiviere Canvas-Selection während des Ziehens
+      canvas.selection = false;
+      canvas.discardActiveObject();
+      return;
+    }
+    
+    // Dann prüfe ob ein Ankerpunkt gehighlighted ist
+    if (this.highlightedAnchor) {
+      // Finde die Pipe und den Anker-Index
+      for (const pipe of this.editablePipes) {
+        const transparentAnchors = pipe.anchors.filter(a => (a as any).fill === 'transparent' || (a as any).fill === '#00ff00');
+        const anchorIndex = transparentAnchors.indexOf(this.highlightedAnchor as any);
+        if (anchorIndex !== -1) {
+          this.movingAnchor = this.highlightedAnchor as fabric.Circle;
+          this.movingPipe = pipe;
+          this.movingAnchorIndex = anchorIndex;
+          this.moveStartPoint = { x: pointer.x, y: pointer.y };
+          
+          // Deaktiviere Canvas-Selection während des Ziehens
+          canvas.selection = false;
+          canvas.discardActiveObject();
+          
+          console.log(`Start moving anchor ${anchorIndex} of pipe`);
+          return;
+        }
+      }
+    }
+    
+    // Sonst prüfe ob ein Segment gehighlighted ist
+    if (this.highlightedSegment) {
+      // Prüfe ob es Teil einer EditablePipe ist
+      let foundPipe = false;
+      for (const pipe of this.editablePipes) {
+        const segmentIndex = pipe.segments.indexOf(this.highlightedSegment as any);
+        if (segmentIndex !== -1) {
+          this.movingSegment = this.highlightedSegment;
+          this.movingPipe = pipe;
+          this.movingSegmentIndex = segmentIndex;
+          this.moveStartPoint = { x: pointer.x, y: pointer.y };
+          foundPipe = true;
+          
+          console.log(`Start moving segment ${segmentIndex} of editable pipe`);
+          break;
+        }
+      }
+      
+      // Wenn es keine EditablePipe ist, könnte es eine geteilte Linie sein
+      if (!foundPipe && this.highlightedSegment.type === 'line') {
+        // Erstelle eine temporäre "Pseudo-Pipe" für geteilte Linien
+        // Dies ermöglicht das Verschieben von durch Ventile geteilten Linien
+        this.movingSegment = this.highlightedSegment;
+        this.movingPipe = null; // Keine echte Pipe
+        this.movingSegmentIndex = -1;
+        this.moveStartPoint = { x: pointer.x, y: pointer.y };
+        
+        console.log(`Start moving split line (not part of editable pipe)`);
+      }
+      
+      if (this.movingSegment) {
+        // Finde alle assoziierten Ventile und T-Stücke für dieses Segment
+        this.findAssociatedComponents(canvas, this.movingSegment);
+        
+        // Deaktiviere Canvas-Selection während des Ziehens
+        canvas.selection = false;
+        canvas.discardActiveObject();
+        
+        console.log(`Found ${this.associatedComponents.length} associated components`);
+      }
+    }
+  }
+  
+  public handleMovePipeMouseUp(canvas: fabric.Canvas, options: any): void {
+    if (this.movingComponent && this.stateManagement) {
+      // Speichere die Änderung mit State Management
+      this.stateManagement.executeOperation('Move Component', () => {
+        console.log('Component move completed');
+      });
+      // Reset Komponenten-Highlight
+      if (this.highlightedComponent) {
+        const objects = this.highlightedComponent.getObjects();
+        objects.forEach(obj => {
+          if ((obj as any).originalStroke) {
+            obj.set('stroke', (obj as any).originalStroke);
+            delete (obj as any).originalStroke;
+          }
+        });
+      }
+    } else if (this.movingAnchor && this.movingPipe && this.stateManagement) {
+      // Speichere die Änderung mit State Management
+      this.stateManagement.executeOperation('Move Pipe Anchor', () => {
+        console.log('Pipe anchor move completed');
+      });
+      // Reset Anchor-Farbe
+      if (this.originalAnchorFill) {
+        this.movingAnchor.set('fill', this.originalAnchorFill);
+        this.originalAnchorFill = null;
+      }
+    } else if (this.movingSegment && this.stateManagement) {
+      // Speichere die Änderung mit State Management (für beide: EditablePipe und geteilte Linien)
+      this.stateManagement.executeOperation('Move Segment', () => {
+        console.log('Segment move completed');
+      });
+    }
+    
+    // Reset Move-Variablen
+    this.movingComponent = null;
+    this.movingSegment = null;
+    this.movingAnchor = null;
+    this.movingPipe = null;
+    this.movingSegmentIndex = -1;
+    this.movingAnchorIndex = -1;
+    this.moveStartPoint = null;
+    this.associatedComponents = [];
+    
+    // Reaktiviere Canvas-Selection
+    canvas.selection = true;
+    canvas.requestRenderAll();
+  }
+  
+  private findAssociatedComponents(canvas: fabric.Canvas, segment: fabric.Object): void {
+    this.associatedComponents = [];
+    
+    // Wenn wir eine Pipe verschieben, finde ALLE Komponenten auf ALLEN Segmenten dieser Pipe
+    if (this.movingPipe && this.movingPipe.segments) {
+      console.log('Finding all components on entire pipe with', this.movingPipe.segments.length, 'segments');
+      
+      // Durchsuche alle Canvas-Objekte nach Ventilen und T-Stücken
+      canvas.getObjects().forEach(obj => {
+        if (obj.type === 'group') {
+          const customType = (obj as any).customType;
+          
+          // Prüfe ob es ein Ventil oder T-Stück ist
+          if (customType === 'gateValveS' || customType === 'gateValveFL' || 
+              customType === 'globeValveS' || customType === 'globeValveFL' ||
+              customType === 'ballValveS' || customType === 'ballValveFL' ||
+              customType === 'teeJoint') {
+            
+            const valveX = obj.left || 0;
+            const valveY = obj.top || 0;
+            
+            // Prüfe ob die Komponente auf irgendeinem Segment der Pipe liegt
+            for (let segmentIndex = 0; segmentIndex < this.movingPipe!.segments.length; segmentIndex++) {
+              const pipeSegment = this.movingPipe!.segments[segmentIndex];
+              if (pipeSegment.type === 'line') {
+                const line = pipeSegment as fabric.Line;
+                
+                // Method 1: Check if this valve/tee has connected lines that include our segment
+                const connectedLines = (obj as any).connectedLines;
+                if (connectedLines && Array.isArray(connectedLines)) {
+                  if (connectedLines.includes(pipeSegment)) {
+                    // Speichere auf welchem Segment diese Komponente liegt
+                    (obj as any).segmentIndex = segmentIndex;
+                    (obj as any).hostLine = pipeSegment;
+                    
+                    // Berechne die relative Position auf der Linie (0 = Start, 1 = Ende)
+                    const lineLength = Math.sqrt(
+                      Math.pow(line.x2! - line.x1!, 2) + Math.pow(line.y2! - line.y1!, 2)
+                    );
+                    const distFromStart = Math.sqrt(
+                      Math.pow(valveX - line.x1!, 2) + Math.pow(valveY - line.y1!, 2)
+                    );
+                    const t = lineLength > 0 ? distFromStart / lineLength : 0.5;
+                    (obj as any).linePosition = Math.max(0, Math.min(1, t)); // Clamp zwischen 0 und 1
+                    
+                    if (!this.associatedComponents.includes(obj as fabric.Group)) {
+                      this.associatedComponents.push(obj as fabric.Group);
+                      console.log(`Found connected ${customType} on segment ${segmentIndex} at t=${t}`);
+                    }
+                    break;
+                  }
+                }
+                
+                // Method 2: Check if valve is ON the line segment
+                if (this.isPointOnLineSegment(valveX, valveY, line.x1!, line.y1!, line.x2!, line.y2!, 15)) {
+                  // Speichere auf welchem Segment diese Komponente liegt
+                  (obj as any).segmentIndex = segmentIndex;
+                  (obj as any).hostLine = pipeSegment;
+                  
+                  // Berechne die relative Position auf der Linie (0 = Start, 1 = Ende)
+                  const lineLength = Math.sqrt(
+                    Math.pow(line.x2! - line.x1!, 2) + Math.pow(line.y2! - line.y1!, 2)
+                  );
+                  const distFromStart = Math.sqrt(
+                    Math.pow(valveX - line.x1!, 2) + Math.pow(valveY - line.y1!, 2)
+                  );
+                  const t = lineLength > 0 ? distFromStart / lineLength : 0.5;
+                  (obj as any).linePosition = Math.max(0, Math.min(1, t)); // Clamp zwischen 0 und 1
+                  
+                  if (!this.associatedComponents.includes(obj as fabric.Group)) {
+                    this.associatedComponents.push(obj as fabric.Group);
+                    console.log(`Found ${customType} on segment ${segmentIndex} at t=${t}`);
+                  }
+                  break;
+                }
+              }
+            }
+          }
+        }
+      });
+      
+      console.log(`Found ${this.associatedComponents.length} total components on pipe`);
+    } else if (segment.type === 'line') {
+      // Fallback für einzelne Linien (nicht Teil einer EditablePipe)
+      const line = segment as fabric.Line;
+      
+      console.log('Finding components for single line:', {
+        x1: line.x1, y1: line.y1,
+        x2: line.x2, y2: line.y2
+      });
+      
+      // Durchsuche alle Canvas-Objekte nach Ventilen und T-Stücken
+      canvas.getObjects().forEach(obj => {
+        if (obj.type === 'group') {
+          const customType = (obj as any).customType;
+          
+          // Prüfe ob es ein Ventil oder T-Stück ist
+          if (customType === 'gateValveS' || customType === 'gateValveFL' || 
+              customType === 'globeValveS' || customType === 'globeValveFL' ||
+              customType === 'ballValveS' || customType === 'ballValveFL' ||
+              customType === 'teeJoint') {
+            
+            const valveX = obj.left || 0;
+            const valveY = obj.top || 0;
+            
+            // Check if valve is ON the line segment
+            if (this.isPointOnLineSegment(valveX, valveY, line.x1!, line.y1!, line.x2!, line.y2!, 15)) {
+              const segmentMidX = (line.x1! + line.x2!) / 2;
+              const segmentMidY = (line.y1! + line.y2!) / 2;
+              const relativeX = valveX - segmentMidX;
+              const relativeY = valveY - segmentMidY;
+              
+              (obj as any).relativePosition = { x: relativeX, y: relativeY };
+              
+              this.associatedComponents.push(obj as fabric.Group);
+              console.log(`Found ${customType} on line at`, valveX, valveY);
+            }
+          }
+        }
+      });
+    }
+  }
+  
+  private isPointOnLineSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number, tolerance: number = 5): boolean {
+    // Calculate the distance from point to line segment
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+    
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    
+    if (lenSq === 0) return false;
+    
+    let param = dot / lenSq;
+    
+    // Check if projection is within line segment
+    if (param < 0 || param > 1) return false;
+    
+    const xx = x1 + param * C;
+    const yy = y1 + param * D;
+    
+    const dx = px - xx;
+    const dy = py - yy;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    return distance < tolerance;
+  }
+  
+  private updateMovingSegment(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    if (!this.movingSegment || !this.moveStartPoint) return;
+    
+    const dx = pointer.x - this.moveStartPoint.x;
+    const dy = pointer.y - this.moveStartPoint.y;
+    
+    // Wenn es eine EditablePipe ist, verwende die normale Logik
+    if (this.movingPipe && this.movingPipe.mainPoints) {
+      this.updateEditablePipeSegment(canvas, pointer);
+      return;
+    }
+    
+    // Ansonsten ist es eine geteilte Linie - verschiebe sie direkt
+    if (this.movingSegment.type === 'line') {
+      const line = this.movingSegment as fabric.Line;
+      
+      // Verschiebe die Linie direkt
+      line.set({
+        x1: (line.x1 || 0) + dx,
+        y1: (line.y1 || 0) + dy,
+        x2: (line.x2 || 0) + dx,
+        y2: (line.y2 || 0) + dy
+      });
+      line.setCoords();
+      
+      // Berechne die neue Mittelpunkt-Position der Linie
+      const newMidX = ((line.x1 || 0) + (line.x2 || 0)) / 2;
+      const newMidY = ((line.y1 || 0) + (line.y2 || 0)) / 2;
+      
+      // Bewege alle assoziierten Ventile und T-Stücke basierend auf ihrer relativen Position
+      this.associatedComponents.forEach(component => {
+        const relativePos = (component as any).relativePosition;
+        if (relativePos) {
+          // Setze die neue Position basierend auf der relativen Position zum Segment-Mittelpunkt
+          const newLeft = newMidX + relativePos.x;
+          const newTop = newMidY + relativePos.y;
+          
+          component.set({
+            left: newLeft,
+            top: newTop
+          });
+          component.setCoords();
+          
+          // Bewege auch die Ankerpunkte des Ventils/T-Stücks
+          // Die Ankerpunkte wurden als separate Canvas-Objekte hinzugefügt
+          const anchors = (component as any).anchors;
+          if (anchors && Array.isArray(anchors)) {
+            // T-Stücke haben Ankerpunkte als direkte Referenzen
+            anchors.forEach((anchor: any) => {
+              if (anchor && anchor.type === 'circle') {
+                // Dies ist eine direkte Referenz zum Ankerpunkt-Objekt
+                anchor.set({
+                  left: (anchor.left || 0) + dx,
+                  top: (anchor.top || 0) + dy
+                });
+                anchor.setCoords();
+              }
+            });
+          }
+          
+          // Für T-Stücke: Suche auch nach Ankerpunkten über componentId
+          const componentId = (component as any).id || (component as any).customId;
+          if (componentId) {
+            canvas.getObjects().forEach(obj => {
+              if (obj.type === 'circle' && (obj as any).isAnchor && 
+                  (obj as any).componentId === componentId) {
+                const circle = obj as fabric.Circle;
+                circle.set({
+                  left: (circle.left || 0) + dx,
+                  top: (circle.top || 0) + dy
+                });
+                circle.setCoords();
+              }
+            });
+          }
+        } else {
+          // Fallback: Wenn keine relative Position gespeichert wurde, verschiebe um dx/dy
+          const currentLeft = component.left || 0;
+          const currentTop = component.top || 0;
+          component.set({
+            left: currentLeft + dx,
+            top: currentTop + dy
+          });
+          component.setCoords();
+        }
+      });
+      
+      // Update die Position für das nächste Delta
+      this.moveStartPoint = { x: pointer.x, y: pointer.y };
+      
+      // Halte die Linie grün hervorgehoben
+      line.set('stroke', '#00ff00');
+      
+      canvas.requestRenderAll();
+    }
+  }
+  
+  private updateEditablePipeSegment(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    if (!this.movingSegment || !this.movingPipe || !this.moveStartPoint || !this.movingPipe.mainPoints) return;
+    
+    const dx = pointer.x - this.moveStartPoint.x;
+    const dy = pointer.y - this.moveStartPoint.y;
+    
+    // Finde welches Segment verschoben wird (nur Linien, keine Bögen)
+    const segmentIndex = this.movingPipe.segments.indexOf(this.movingSegment as any);
+    if (segmentIndex === -1 || this.movingSegment.type !== 'line') return;
+    
+    const line = this.movingSegment as fabric.Line;
+    
+    // Debug: Zeige Segment-Struktur
+    console.log('Segment types:', this.movingPipe.segments.map(s => s.type));
+    console.log('Moving segment index:', segmentIndex);
+    console.log('MainPoints count:', this.movingPipe.mainPoints.length);
+    
+    // Finde die richtigen mainPoints für dieses Liniensegment
+    // Wir müssen die Linien zählen, nicht alle Segmente
+    let lineCounter = 0;
+    let foundStartIndex = -1;
+    let foundEndIndex = -1;
+    
+    for (let i = 0; i <= segmentIndex; i++) {
+      if (this.movingPipe.segments[i].type === 'line') {
+        if (i === segmentIndex) {
+          // Das ist unsere Linie!
+          foundStartIndex = lineCounter;
+          foundEndIndex = lineCounter + 1;
+          break;
+        }
+        lineCounter++;
+      }
+    }
+    
+    if (foundStartIndex === -1 || foundEndIndex === -1 || 
+        foundEndIndex >= this.movingPipe.mainPoints.length) {
+      console.error('Could not map segment to mainPoints correctly');
+      console.log('Line counter:', lineCounter, 'Start:', foundStartIndex, 'End:', foundEndIndex);
+      return;
+    }
+    
+    console.log(`Moving line segment: mainPoints[${foundStartIndex}] to mainPoints[${foundEndIndex}]`);
+    
+    // Bestimme die Richtung der Linie
+    const lineVector = {
+      x: line.x2! - line.x1!,
+      y: line.y2! - line.y1!
+    };
+    const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
+    
+    if (lineLength === 0) return;
+    
+    // Prüfe ob die Linie vertikal oder horizontal ist
+    const isVertical = Math.abs(lineVector.x) < 5;
+    const isHorizontal = Math.abs(lineVector.y) < 5;
+    
+    let moveX = 0, moveY = 0;
+    
+    if (isVertical) {
+      // Vertikale Linie: nur horizontale Bewegung erlaubt
+      moveX = dx;
+      moveY = 0;
+    } else if (isHorizontal) {
+      // Horizontale Linie: nur vertikale Bewegung erlaubt
+      moveX = 0;
+      moveY = dy;
+    } else {
+      // Diagonale Linie: Bewegung senkrecht zur Linie
+      const lineDir = {
+        x: lineVector.x / lineLength,
+        y: lineVector.y / lineLength
+      };
+      
+      // Normale zur Linie (90 Grad gedreht)
+      const normal = {
+        x: -lineDir.y,
+        y: lineDir.x
+      };
+      
+      // Projiziere die Mausbewegung auf die Normale
+      const projection = dx * normal.x + dy * normal.y;
+      moveX = projection * normal.x;
+      moveY = projection * normal.y;
+    }
+    
+    // Verschiebe nur die beiden Endpunkte der aktuellen Linie
+    this.movingPipe.mainPoints[foundStartIndex].x += moveX;
+    this.movingPipe.mainPoints[foundStartIndex].y += moveY;
+    this.movingPipe.mainPoints[foundEndIndex].x += moveX;
+    this.movingPipe.mainPoints[foundEndIndex].y += moveY;
+    
+    // Neuzeichnen der gesamten Pipe
+    this.redrawPipe(canvas, this.movingPipe);
+    
+    // Nach dem Neuzeichnen der Pipe, repositioniere alle Komponenten auf ihren jeweiligen Segmenten
+    this.associatedComponents.forEach(component => {
+      const segmentIndex = (component as any).segmentIndex;
+      const linePosition = (component as any).linePosition;
+      const customType = (component as any).customType;
+      
+      if (segmentIndex !== undefined && linePosition !== undefined && 
+          this.movingPipe && segmentIndex < this.movingPipe.segments.length) {
+        const hostSegment = this.movingPipe.segments[segmentIndex];
+        
+        if (hostSegment.type === 'line') {
+          const line = hostSegment as fabric.Line;
+          
+          // Berechne die neue Position basierend auf der relativen Position auf der Linie
+          const newX = line.x1! + (line.x2! - line.x1!) * linePosition;
+          const newY = line.y1! + (line.y2! - line.y1!) * linePosition;
+          
+          // Setze die neue Position
+          component.set({
+            left: newX,
+            top: newY
+          });
+          component.setCoords();
+          
+          // Bewege auch die Ankerpunkte des Ventils/T-Stücks
+          const anchors = (component as any).anchors;
+          if (anchors && Array.isArray(anchors)) {
+            // Für T-Stücke und Ventile: Ankerpunkte sind relativ zur Komponente
+            // Berechne den Winkel der Linie
+            const angle = Math.atan2(line.y2! - line.y1!, line.x2! - line.x1!) * 180 / Math.PI;
+            
+            anchors.forEach((anchor: fabric.Circle, index: number) => {
+              if (anchor && anchor.left !== undefined && anchor.top !== undefined) {
+                // Die Ankerpunkte sollten relativ zur neuen Position bleiben
+                // T-Stücke haben normalerweise 2 Ankerpunkte auf gegenüberliegenden Seiten
+                const distance = 15; // Standard-Abstand der Ankerpunkte
+                
+                if (customType === 'teeJoint') {
+                  // T-Stück Ankerpunkte senkrecht zur Linie
+                  const perpAngle = (angle + 90) * Math.PI / 180;
+                  const offsetX = Math.cos(perpAngle) * distance * (index === 0 ? 1 : -1);
+                  const offsetY = Math.sin(perpAngle) * distance * (index === 0 ? 1 : -1);
+                  
+                  anchor.set({
+                    left: newX + offsetX,
+                    top: newY + offsetY
+                  });
+                } else {
+                  // Ventil-Ankerpunkte entlang der Linie
+                  const lineAngle = angle * Math.PI / 180;
+                  const offsetX = Math.cos(lineAngle) * distance * (index === 0 ? -1 : 1);
+                  const offsetY = Math.sin(lineAngle) * distance * (index === 0 ? -1 : 1);
+                  
+                  anchor.set({
+                    left: newX + offsetX,
+                    top: newY + offsetY
+                  });
+                }
+                anchor.setCoords();
+              }
+            });
+          }
+        }
+      }
+    });
+    
+    // Update die Position für das nächste Delta
+    this.moveStartPoint = { x: pointer.x, y: pointer.y };
+    
+    // Nach dem Neuzeichnen müssen wir das bewegte Segment wieder finden und highlighten
+    if (segmentIndex < this.movingPipe.segments.length) {
+      this.movingSegment = this.movingPipe.segments[segmentIndex];
+      // Halte es grün hervorgehoben
+      if (this.movingSegment) {
+        this.movingSegment.set('stroke', '#00ff00');
+      }
+    }
+    
+    canvas.requestRenderAll();
+  }
+  
+  // Diese Methoden werden nicht mehr benötigt, da redrawPipe alles übernimmt
+  
+  private updateMovingAnchor(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    if (!this.movingAnchor || !this.movingPipe || !this.moveStartPoint || !this.movingPipe.mainPoints) return;
+    
+    const dx = pointer.x - this.moveStartPoint.x;
+    const dy = pointer.y - this.moveStartPoint.y;
+    
+    // Bewege nur den gewählten mainPoint
+    if (this.movingAnchorIndex >= 0 && this.movingAnchorIndex < this.movingPipe.mainPoints.length) {
+      this.movingPipe.mainPoints[this.movingAnchorIndex].x += dx;
+      this.movingPipe.mainPoints[this.movingAnchorIndex].y += dy;
+      
+      console.log(`Moving anchor ${this.movingAnchorIndex} to:`, this.movingPipe.mainPoints[this.movingAnchorIndex]);
+      
+      // Direkt den Ankerpunkt visuell aktualisieren (für sofortiges Feedback)
+      this.movingAnchor.set({
+        left: this.movingPipe.mainPoints[this.movingAnchorIndex].x,
+        top: this.movingPipe.mainPoints[this.movingAnchorIndex].y
+      });
+      this.movingAnchor.setCoords();
+      
+      // Neuzeichnen der gesamten Pipe
+      this.redrawPipe(canvas, this.movingPipe);
+      
+      // Update die Position für das nächste Delta
+      this.moveStartPoint = { x: pointer.x, y: pointer.y };
+      
+      // Halte den Ankerpunkt grün hervorgehoben
+      const transparentAnchors = this.movingPipe.anchors.filter(a => (a as any).fill === 'transparent' || (a as any).fill === '#00ff00');
+      if (this.movingAnchorIndex < transparentAnchors.length) {
+        this.movingAnchor = transparentAnchors[this.movingAnchorIndex] as fabric.Circle;
+        this.movingAnchor.set('fill', '#00ff00');
+        // Stelle sicher, dass die Position korrekt ist
+        this.movingAnchor.set({
+          left: this.movingPipe.mainPoints[this.movingAnchorIndex].x,
+          top: this.movingPipe.mainPoints[this.movingAnchorIndex].y
+        });
+        this.movingAnchor.setCoords();
+      }
+      
+      canvas.requestRenderAll();
+    }
   }
 }

@@ -91,6 +91,11 @@ export class KeyboardShortcutsService {
         description: 'Text mode',
         handler: () => this.drawingService.setDrawingMode('text')
       },
+      {
+        key: 'm',
+        description: 'Move mode (pipes and anchors)',
+        handler: () => this.drawingService.setDrawingMode('movePipe' as any)
+      },
       
       // Undo/Redo
       {
