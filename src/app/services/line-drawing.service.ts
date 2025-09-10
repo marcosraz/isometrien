@@ -53,6 +53,11 @@ export class LineDrawingService {
   private originalAnchorFill: string | null = null;
   // Associated valves and T-pieces that need to move with segments
   private associatedComponents: fabric.Group[] = [];
+  // Legacy compatibility - drag offset tracking
+  private dragOffsetT: number = 0;
+  private mouseStartT: number = 0;
+  private componentInitialT: number = 0;
+  private isMovingPipe: boolean = false;
 
   private stateManagement: StateManagementService | null = null;
   private drawingService: any = null;
@@ -2466,4 +2471,5 @@ export class LineDrawingService {
       canvas.requestRenderAll();
     }
   }
+
 }
