@@ -103,54 +103,96 @@ export class LineDrawingService {
     
     // Setup moveComponent mode
     if (mode === 'moveComponent' && this.canvas) {
-      console.log('🎯 Entering moveComponent mode - making T-pieces selectable');
-      // Make T-pieces selectable and add hover effects
+      console.log('🎯 Entering moveComponent mode - making T-pieces and valves selectable');
+      // Make T-pieces and valves selectable and add hover effects
       this.canvas.getObjects().forEach(obj => {
-        if ((obj as any).customType === 'teeJoint') {
-          console.log('Found T-piece, making it selectable:', obj);
+        const customType = (obj as any).customType;
+        const isValveType = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                           customType === 'globeValveS' || customType === 'globeValveFL' ||
+                           customType === 'ballValveS' || customType === 'ballValveFL';
+
+        if (customType === 'teeJoint' || isValveType) {
+          console.log('Found component, making it selectable:', customType, obj);
           obj.set({
             selectable: true,
             evented: true,
             hoverCursor: 'move'
           });
           
-          // Get the T-piece lines for hover effects
-          const tpiece = obj as any;
-          if (tpiece.teeLines) {
-            // Add hover effects to each T-piece line so hovering over visible lines triggers the effect
-            tpiece.teeLines.forEach((line: any, index: number) => {
-              if (line) {
-                // Clear any existing hover handlers to prevent duplicates
-                line.off('mouseover');
-                line.off('mouseout');
-                
-                // Add hover effect to individual lines
-                line.on('mouseover', () => {
-                  if (this.drawingMode === 'moveComponent') {
-                    console.log(`🟢 T-piece line ${index} hover - highlighting all lines in green`);
-                    tpiece.teeLines.forEach((tLine: any) => {
-                      if (tLine) {
-                        (tLine as any).originalStroke = (tLine as any).originalStroke || tLine.stroke;
-                        tLine.set('stroke', '#4CAF50'); // Green hover highlight
-                      }
-                    });
-                    this.canvas!.requestRenderAll();
+          // Handle hover effects based on component type
+          if (customType === 'teeJoint') {
+            // Get the T-piece lines for hover effects
+            const tpiece = obj as any;
+            if (tpiece.teeLines) {
+              // Add hover effects to each T-piece line so hovering over visible lines triggers the effect
+              tpiece.teeLines.forEach((line: any, index: number) => {
+                if (line) {
+                  // Clear any existing hover handlers to prevent duplicates
+                  line.off('mouseover');
+                  line.off('mouseout');
+
+                  // Add hover effect to individual lines
+                  line.on('mouseover', () => {
+                    if (this.drawingMode === 'moveComponent') {
+                      console.log(`🟢 T-piece line ${index} hover - highlighting all lines in green`);
+                      tpiece.teeLines.forEach((tLine: any) => {
+                        if (tLine) {
+                          (tLine as any).originalStroke = (tLine as any).originalStroke || tLine.stroke;
+                          tLine.set('stroke', '#4CAF50'); // Green hover highlight
+                        }
+                      });
+                      this.canvas!.requestRenderAll();
+                    }
+                  });
+
+                  // Remove hover effect when mouse leaves the line
+                  line.on('mouseout', () => {
+                    if (this.drawingMode === 'moveComponent') {
+                      console.log(`🟢 T-piece line ${index} mouseout - removing green highlight`);
+                      tpiece.teeLines.forEach((tLine: any) => {
+                        if (tLine && (tLine as any).originalStroke) {
+                          tLine.set('stroke', (tLine as any).originalStroke);
+                          delete (tLine as any).originalStroke;
+                        }
+                      });
+                      this.canvas!.requestRenderAll();
+                    }
+                  });
+                }
+              });
+            }
+          } else if (isValveType) {
+            // For valves, add hover effect to the group
+            const valve = obj as fabric.Group;
+
+            // Clear any existing hover handlers
+            valve.off('mouseover');
+            valve.off('mouseout');
+
+            // Store original colors
+            valve.on('mouseover', () => {
+              if (this.drawingMode === 'moveComponent') {
+                console.log(`🟢 Valve hover - highlighting in green`);
+                valve.getObjects().forEach((subObj: any) => {
+                  if (subObj.stroke) {
+                    (subObj as any).originalStroke = (subObj as any).originalStroke || subObj.stroke;
+                    subObj.set('stroke', '#4CAF50');
                   }
                 });
-                
-                // Remove hover effect when mouse leaves the line
-                line.on('mouseout', () => {
-                  if (this.drawingMode === 'moveComponent') {
-                    console.log(`🟢 T-piece line ${index} mouseout - removing green highlight`);
-                    tpiece.teeLines.forEach((tLine: any) => {
-                      if (tLine && (tLine as any).originalStroke) {
-                        tLine.set('stroke', (tLine as any).originalStroke);
-                        delete (tLine as any).originalStroke;
-                      }
-                    });
-                    this.canvas!.requestRenderAll();
+                this.canvas!.requestRenderAll();
+              }
+            });
+
+            valve.on('mouseout', () => {
+              if (this.drawingMode === 'moveComponent') {
+                console.log(`🟢 Valve mouseout - restoring original colors`);
+                valve.getObjects().forEach((subObj: any) => {
+                  if ((subObj as any).originalStroke) {
+                    subObj.set('stroke', (subObj as any).originalStroke);
+                    delete (subObj as any).originalStroke;
                   }
                 });
+                this.canvas!.requestRenderAll();
               }
             });
           }
@@ -162,23 +204,40 @@ export class LineDrawingService {
     
     // Cleanup moveComponent mode
     if (this.drawingMode === 'moveComponent' && mode !== 'moveComponent' && this.canvas) {
-      console.log('🎯 Leaving moveComponent mode - resetting T-pieces');
-      // Reset T-pieces to non-selectable and remove event listeners
+      console.log('🎯 Leaving moveComponent mode - resetting T-pieces and valves');
+      // Reset T-pieces and valves to non-selectable and remove event listeners
       this.canvas.getObjects().forEach(obj => {
-        if ((obj as any).customType === 'teeJoint') {
-          // Remove hover effects and event listeners from lines
-          if ((obj as any).teeLines) {
+        const customType = (obj as any).customType;
+        const isValveType = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                           customType === 'globeValveS' || customType === 'globeValveFL' ||
+                           customType === 'ballValveS' || customType === 'ballValveFL';
+
+        if (customType === 'teeJoint' || isValveType) {
+          // Remove hover effects and event listeners based on component type
+          if (customType === 'teeJoint' && (obj as any).teeLines) {
             (obj as any).teeLines.forEach((line: any) => {
               if (line) {
                 // Remove event listeners from individual lines
                 line.off('mouseover');
                 line.off('mouseout');
-                
+
                 // Reset stroke color if modified
                 if ((line as any).originalStroke) {
                   line.set('stroke', (line as any).originalStroke);
                   delete (line as any).originalStroke;
                 }
+              }
+            });
+          } else if (isValveType) {
+            // Remove hover effects from valve group
+            obj.off('mouseover');
+            obj.off('mouseout');
+
+            // Reset colors for all valve sub-objects
+            (obj as fabric.Group).getObjects().forEach((subObj: any) => {
+              if ((subObj as any).originalStroke) {
+                subObj.set('stroke', (subObj as any).originalStroke);
+                delete (subObj as any).originalStroke;
               }
             });
           }
@@ -3237,8 +3296,11 @@ export class LineDrawingService {
     
     // Prüfe ob wir ein T-Stück oder Ventil angeklickt haben
     if (target) {
-      const isValve = target.type === 'group' && ((target as any).isValve || (target as any).valveType);
-      const isTeeJoint = (target as any).customType === 'teeJoint';
+      const customType = (target as any).customType;
+      const isValve = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                     customType === 'globeValveS' || customType === 'globeValveFL' ||
+                     customType === 'ballValveS' || customType === 'ballValveFL';
+      const isTeeJoint = customType === 'teeJoint';
       
       console.log('Component check:', { 
         isValve, 
@@ -3303,24 +3365,73 @@ export class LineDrawingService {
 
     // If we're dragging a component along a pipeline
     if (this.selectedComponent && this.componentHostLine) {
-      // For T-pieces, use the combined virtual line from both connected segments
+      // For T-pieces and valves, use the combined virtual line from both connected segments
       let effectiveHostLine = this.componentHostLine;
+      const customType = (this.selectedComponent as any).customType;
+      const isValve = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                     customType === 'globeValveS' || customType === 'globeValveFL' ||
+                     customType === 'ballValveS' || customType === 'ballValveFL';
 
-      if ((this.selectedComponent as any).customType === 'teeJoint' &&
+      console.log('🔄 Movement check:', {
+        componentType: customType,
+        isValve,
+        hasConnectedLines: !!(this.selectedComponent as any).connectedLines,
+        connectedLinesCount: (this.selectedComponent as any).connectedLines?.length || 0,
+        hostLineType: (this.componentHostLine as any).customType || 'standard'
+      });
+
+      if (((this.selectedComponent as any).customType === 'teeJoint' || isValve) &&
           (this.selectedComponent as any).connectedLines?.length >= 2) {
         // Create a virtual line that spans both connected segments
-        const line1 = (this.selectedComponent as any).connectedLines[0];
-        const line2 = (this.selectedComponent as any).connectedLines[1];
+        let line1 = (this.selectedComponent as any).connectedLines[0];
+        let line2 = (this.selectedComponent as any).connectedLines[1];
 
         if (line1 && line2) {
-          // Virtual line from line1 start to line2 end
+          // For valves, we need to determine which line is on which side
+          // The line that has its END point closer to the valve is the "left" line
+          // The line that has its START point closer to the valve is the "right" line
+          const valveX = this.selectedComponent.left || 0;
+          const valveY = this.selectedComponent.top || 0;
+
+          const dist1Start = Math.sqrt(Math.pow((line1.x1 || 0) - valveX, 2) + Math.pow((line1.y1 || 0) - valveY, 2));
+          const dist1End = Math.sqrt(Math.pow((line1.x2 || 0) - valveX, 2) + Math.pow((line1.y2 || 0) - valveY, 2));
+          const dist2Start = Math.sqrt(Math.pow((line2.x1 || 0) - valveX, 2) + Math.pow((line2.y1 || 0) - valveY, 2));
+          const dist2End = Math.sqrt(Math.pow((line2.x2 || 0) - valveX, 2) + Math.pow((line2.y2 || 0) - valveY, 2));
+
+          let virtualStart = { x: 0, y: 0 };
+          let virtualEnd = { x: 0, y: 0 };
+
+          // Determine the correct virtual line endpoints
+          if (dist1End < dist1Start && dist2Start < dist2End) {
+            // line1 ends at valve, line2 starts at valve - normal order
+            virtualStart = { x: line1.x1 || 0, y: line1.y1 || 0 };
+            virtualEnd = { x: line2.x2 || 0, y: line2.y2 || 0 };
+          } else if (dist2End < dist2Start && dist1Start < dist1End) {
+            // line2 ends at valve, line1 starts at valve - swap them
+            virtualStart = { x: line2.x1 || 0, y: line2.y1 || 0 };
+            virtualEnd = { x: line1.x2 || 0, y: line1.y2 || 0 };
+            // Also swap the line references for correct segment updates
+            const temp = line1;
+            line1 = line2;
+            line2 = temp;
+            (this.selectedComponent as any).connectedLines = [line1, line2];
+          } else {
+            // Fallback: use the original approach
+            virtualStart = { x: line1.x1 || 0, y: line1.y1 || 0 };
+            virtualEnd = { x: line2.x2 || 0, y: line2.y2 || 0 };
+          }
+
+          // Create the virtual line
           effectiveHostLine = new fabric.Line(
-            [line1.x1 || 0, line1.y1 || 0, line2.x2 || 0, line2.y2 || 0],
+            [virtualStart.x, virtualStart.y, virtualEnd.x, virtualEnd.y],
             { stroke: 'transparent' }
           );
-          console.log('📏 Using virtual line for T-piece movement:', {
-            start: { x: (line1.x1 || 0).toFixed(0), y: (line1.y1 || 0).toFixed(0) },
-            end: { x: (line2.x2 || 0).toFixed(0), y: (line2.y2 || 0).toFixed(0) }
+          console.log('📏 Using virtual line for component movement:', {
+            componentType: customType,
+            start: { x: virtualStart.x.toFixed(0), y: virtualStart.y.toFixed(0) },
+            end: { x: virtualEnd.x.toFixed(0), y: virtualEnd.y.toFixed(0) },
+            line1: { x1: (line1.x1 || 0).toFixed(0), y1: (line1.y1 || 0).toFixed(0), x2: (line1.x2 || 0).toFixed(0), y2: (line1.y2 || 0).toFixed(0) },
+            line2: { x1: (line2.x1 || 0).toFixed(0), y1: (line2.y1 || 0).toFixed(0), x2: (line2.x2 || 0).toFixed(0), y2: (line2.y2 || 0).toFixed(0) }
           });
         }
       }
@@ -3370,9 +3481,15 @@ export class LineDrawingService {
       if (!target) {
         const pointer = canvas.getPointer(options.e);
         const objects = canvas.getObjects();
-        
+
         for (const obj of objects) {
-          if ((obj as any).customType === 'teeJoint') {
+          const customType = (obj as any).customType;
+          const isComponentType = customType === 'teeJoint' ||
+                                  customType === 'gateValveS' || customType === 'gateValveFL' ||
+                                  customType === 'globeValveS' || customType === 'globeValveFL' ||
+                                  customType === 'ballValveS' || customType === 'ballValveFL';
+
+          if (isComponentType) {
             // Check if pointer is within the T-piece bounding box
             const bounds = obj.getBoundingRect();
             const tolerance = 20; // Add some tolerance for easier hovering
@@ -3387,10 +3504,13 @@ export class LineDrawingService {
           }
         }
       }
-      
+
       if (target) {
-        const isTeeJoint = (target as any).customType === 'teeJoint';
-        const isValve = target.type === 'group' && ((target as any).isValve || (target as any).valveType);
+        const customType = (target as any).customType;
+        const isTeeJoint = customType === 'teeJoint';
+        const isValve = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                       customType === 'globeValveS' || customType === 'globeValveFL' ||
+                       customType === 'ballValveS' || customType === 'ballValveFL';
         
         if (isTeeJoint || isValve) {
           // Show hover cursor
@@ -3501,11 +3621,164 @@ export class LineDrawingService {
       customType: (component as any).customType,
       teeId: (component as any).teeId,
       teeLines: (component as any).teeLines?.length || 0,
-      connectedLines: (component as any).connectedLines?.length || 0
+      connectedLines: (component as any).connectedLines?.length || 0,
+      anchors: (component as any).anchors?.length || 0
     });
+
+    // Special handling for valves - they need the longer pipeline segments, not the tiny gap between anchors
+    const customType = (component as any).customType;
+    const isValve = customType === 'gateValveS' || customType === 'gateValveFL' ||
+                    customType === 'globeValveS' || customType === 'globeValveFL' ||
+                    customType === 'ballValveS' || customType === 'ballValveFL';
+
+    if (isValve) {
+      console.log('🔧 Component is a VALVE - checking for connected pipeline segments');
+
+      // Check if valve already has connected lines from previous operations
+      if ((component as any).connectedLines && (component as any).connectedLines.length >= 2) {
+        console.log('✅ Valve already has', (component as any).connectedLines.length, 'connected lines - using them');
+        // For valves with connected lines, use the first line as the host line
+        // The handleMoveComponentMouseMove function will create a virtual line from both segments
+        this.componentHostLine = (component as any).connectedLines[0];
+        // IMPORTANT: Keep the connectedLines on the component for virtual line creation
+        return; // Early return, we already have what we need
+      }
+
+      // For valves, we need to find the two pipeline segments on either side
+      // Valves split lines, so we have segments before and after the valve
+      const valveAnchors = (component as any).anchors || [];
+      const connectedLines: fabric.Line[] = [];
+
+      if (valveAnchors.length >= 2) {
+        // Get valve anchor positions
+        const anchor1X = valveAnchors[0].left || valveAnchors[0].x || 0;
+        const anchor1Y = valveAnchors[0].top || valveAnchors[0].y || 0;
+        const anchor2X = valveAnchors[1].left || valveAnchors[1].x || 0;
+        const anchor2Y = valveAnchors[1].top || valveAnchors[1].y || 0;
+
+        console.log('🔍 Valve anchors:', {
+          anchor1: { x: anchor1X, y: anchor1Y },
+          anchor2: { x: anchor2X, y: anchor2Y }
+        });
+
+        // Find lines that connect to each anchor
+        canvas.getObjects().forEach(obj => {
+          if ((obj.type === 'line' || (obj as any).customType === 'CustomLine') && obj !== component) {
+            const line = obj as fabric.Line;
+
+            // Skip special lines
+            if ((line as any).isDimensionPart ||
+                (line as any).teeId ||
+                (line.opacity !== undefined && line.opacity < 0.1)) {
+              return;
+            }
+
+            // Get line coordinates
+            let x1: number, y1: number, x2: number, y2: number;
+
+            if ((line as any).customType === 'CustomLine') {
+              const centerX = line.left || 0;
+              const centerY = line.top || 0;
+              const coords = (line as any).calcLinePoints ? (line as any).calcLinePoints() : {
+                x1: (line as any).x1 || 0,
+                y1: (line as any).y1 || 0,
+                x2: (line as any).x2 || 0,
+                y2: (line as any).y2 || 0
+              };
+              x1 = centerX + coords.x1;
+              y1 = centerY + coords.y1;
+              x2 = centerX + coords.x2;
+              y2 = centerY + coords.y2;
+            } else {
+              x1 = line.x1 || 0;
+              y1 = line.y1 || 0;
+              x2 = line.x2 || 0;
+              y2 = line.y2 || 0;
+            }
+
+            // Calculate line length
+            const lineLength = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+
+            // Skip very short lines (likely the gap between valve anchors)
+            if (lineLength < 20) {
+              console.log('  Skipping short line:', lineLength.toFixed(1), 'pixels');
+              return;
+            }
+
+            // Check if line connects to either anchor
+            const tolerance = 5; // Tolerance for anchor connection
+            const connectsToAnchor1 =
+              (Math.abs(x1 - anchor1X) < tolerance && Math.abs(y1 - anchor1Y) < tolerance) ||
+              (Math.abs(x2 - anchor1X) < tolerance && Math.abs(y2 - anchor1Y) < tolerance);
+            const connectsToAnchor2 =
+              (Math.abs(x1 - anchor2X) < tolerance && Math.abs(y1 - anchor2Y) < tolerance) ||
+              (Math.abs(x2 - anchor2X) < tolerance && Math.abs(y2 - anchor2Y) < tolerance);
+
+            if (connectsToAnchor1 || connectsToAnchor2) {
+              console.log('📏 Found connected line:', {
+                length: lineLength.toFixed(1),
+                connectsToAnchor1,
+                connectsToAnchor2,
+                coords: { x1: x1.toFixed(0), y1: y1.toFixed(0), x2: x2.toFixed(0), y2: y2.toFixed(0) }
+              });
+              connectedLines.push(line);
+            }
+          }
+        });
+
+        // Store connected lines on the valve component (like T-pieces)
+        if (connectedLines.length >= 2) {
+          // Sort the lines so that they are in the correct order
+          // The line with its END point at the valve should be first
+          // The line with its START point at the valve should be second
+          const sorted = connectedLines.sort((a, b) => {
+            // Check which end of each line is closer to the valve
+            const valveX = compX;
+            const valveY = compY;
+
+            const aStartDist = Math.sqrt(Math.pow((a.x1 || 0) - valveX, 2) + Math.pow((a.y1 || 0) - valveY, 2));
+            const aEndDist = Math.sqrt(Math.pow((a.x2 || 0) - valveX, 2) + Math.pow((a.y2 || 0) - valveY, 2));
+            const bStartDist = Math.sqrt(Math.pow((b.x1 || 0) - valveX, 2) + Math.pow((b.y1 || 0) - valveY, 2));
+            const bEndDist = Math.sqrt(Math.pow((b.x2 || 0) - valveX, 2) + Math.pow((b.y2 || 0) - valveY, 2));
+
+            // Line with END at valve should come first
+            const aIsEndAtValve = aEndDist < aStartDist;
+            const bIsEndAtValve = bEndDist < bStartDist;
+
+            if (aIsEndAtValve && !bIsEndAtValve) return -1;
+            if (!aIsEndAtValve && bIsEndAtValve) return 1;
+            return 0;
+          });
+
+          (component as any).connectedLines = sorted;
+          console.log('✅ Found and stored', sorted.length, 'connected pipeline segments for valve (sorted)');
+
+          // Use the first connected line as the host line
+          this.componentHostLine = sorted[0];
+          nearestLine = sorted[0];
+          return; // Early return, we found what we need
+        } else if (connectedLines.length === 1) {
+          // If we only found one connected line, use it
+          (component as any).connectedLines = [connectedLines[0]];
+          this.componentHostLine = connectedLines[0];
+          nearestLine = connectedLines[0];
+          console.log('⚠️ Only found 1 connected line for valve');
+          return;
+        } else {
+          console.log('❌ No connected lines found for valve!');
+        }
+      }
+    }
 
     // Special handling for T-pieces with connected lines
     if ((component as any).customType === 'teeJoint') {
+      // Check if T-piece already has connected lines
+      if ((component as any).connectedLines && (component as any).connectedLines.length >= 2) {
+        console.log('🔗 T-piece already has connected lines, using them');
+        this.componentHostLine = (component as any).connectedLines[0];
+        return; // Early return
+      }
+
       // First try to use stored connected lines
       let connectedLines = (component as any).connectedLines;
 
@@ -3588,11 +3861,19 @@ export class LineDrawingService {
       });
     });
 
-    // Get the T-piece's own lines to exclude them
-    const componentTeeId = (component as any).teeId;
-    const componentTeeLines = (component as any).teeLines || [];
-    
-    canvas.getObjects().forEach(obj => {
+    // Check if we already handled this component (valve or T-piece with connectedLines)
+    if (this.componentHostLine) {
+      console.log('✅ Component host line already set, skipping general search');
+      return;
+    }
+
+    // Only search for general lines if we haven't found one for a valve
+    if (!nearestLine) {
+      // Get the T-piece's own lines to exclude them
+      const componentTeeId = (component as any).teeId;
+      const componentTeeLines = (component as any).teeLines || [];
+
+      canvas.getObjects().forEach(obj => {
       // Check for both regular lines and CustomLines
       if ((obj.type === 'line' || (obj as any).customType === 'CustomLine') && obj !== component) {
         const line = obj as fabric.Line;
@@ -3690,7 +3971,8 @@ export class LineDrawingService {
         }
       }
     });
-    
+    }
+
     if (nearestLine) {
       this.componentHostLine = nearestLine;
       const lineObj = nearestLine as fabric.Line;
@@ -4278,7 +4560,7 @@ export class LineDrawingService {
       }
     }
     
-    // Update connected pipeline segments if they exist (CRITICAL for T-piece movement)
+    // Update connected pipeline segments if they exist (CRITICAL for T-piece and valve movement)
     const connectedLines = (component as any).connectedLines;
     if (connectedLines && Array.isArray(connectedLines) && connectedLines.length >= 2) {
       console.log('🔗 Updating connected pipeline segments:', connectedLines.length);
@@ -4287,10 +4569,26 @@ export class LineDrawingService {
       const line2 = connectedLines[1];
 
       if (line1 && line2) {
-        // Calculate gap size based on component type (same logic as creation)
+        // Calculate gap size based on component type
+        const customType = (component as any).customType;
         let gapSize = 40; // Default gap for T-pieces
-        if ((component as any).customType === 'gateValveS') gapSize = 20;
-        if ((component as any).customType === 'gateValveFL') gapSize = 40;
+
+        // For valves, use the actual distance between their anchors
+        if (customType === 'gateValveS' || customType === 'globeValveS' || customType === 'ballValveS' ||
+            customType === 'gateValveFL' || customType === 'globeValveFL' || customType === 'ballValveFL') {
+          // Get the actual distance between valve anchors
+          const valveAnchors = (component as any).anchors;
+          if (valveAnchors && valveAnchors.length >= 2) {
+            const anchor1X = valveAnchors[0].left || 0;
+            const anchor1Y = valveAnchors[0].top || 0;
+            const anchor2X = valveAnchors[1].left || 0;
+            const anchor2Y = valveAnchors[1].top || 0;
+            gapSize = Math.sqrt(Math.pow(anchor2X - anchor1X, 2) + Math.pow(anchor2Y - anchor1Y, 2));
+            console.log('📏 Using actual valve anchor distance as gap:', gapSize.toFixed(1));
+          } else {
+            gapSize = 32; // Fallback gap for valves
+          }
+        }
 
         const halfGap = gapSize / 2;
 
@@ -4320,6 +4618,12 @@ export class LineDrawingService {
           const line1EndX = newPos.x - (halfGap * unitX);
           const line1EndY = newPos.y - (halfGap * unitY);
 
+          console.log('📝 Updating line1:', {
+            oldEnd: { x: (line1.x2 || 0).toFixed(0), y: (line1.y2 || 0).toFixed(0) },
+            newEnd: { x: line1EndX.toFixed(0), y: line1EndY.toFixed(0) },
+            keepStart: { x: (line1.x1 || 0).toFixed(0), y: (line1.y1 || 0).toFixed(0) }
+          });
+
           line1.set({
             x2: line1EndX,
             y2: line1EndY
@@ -4330,6 +4634,12 @@ export class LineDrawingService {
           // Update line2: from (newPos + halfGap) to its current end
           const line2StartX = newPos.x + (halfGap * unitX);
           const line2StartY = newPos.y + (halfGap * unitY);
+
+          console.log('📝 Updating line2:', {
+            oldStart: { x: (line2.x1 || 0).toFixed(0), y: (line2.y1 || 0).toFixed(0) },
+            newStart: { x: line2StartX.toFixed(0), y: line2StartY.toFixed(0) },
+            keepEnd: { x: (line2.x2 || 0).toFixed(0), y: (line2.y2 || 0).toFixed(0) }
+          });
 
           line2.set({
             x1: line2StartX,

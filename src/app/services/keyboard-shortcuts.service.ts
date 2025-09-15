@@ -110,7 +110,7 @@ export class KeyboardShortcutsService {
               break;
             case '3':
               this.drawingService.setDrawingMode('moveComponent' as any);
-              console.log('⚙️ T-Stück/Ventil verschieben aktiviert');
+              console.log('⚙️ T-Stück/Ventil verschieben aktiviert (Shortcut: B)');
               break;
             case '4':
               alert('T-Stück einfügen wird in einer zukünftigen Version verfügbar sein.');
@@ -140,6 +140,11 @@ export class KeyboardShortcutsService {
         key: 'm',
         description: 'Move mode (pipes and anchors)',
         handler: () => this.drawingService.setDrawingMode('movePipe' as any)
+      },
+      {
+        key: 'b',
+        description: 'Move T-pieces and valves along pipes',
+        handler: () => this.drawingService.setDrawingMode('moveComponent' as any)
       },
       
       // Undo/Redo
