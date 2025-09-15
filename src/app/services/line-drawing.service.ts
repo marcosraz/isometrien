@@ -3956,9 +3956,19 @@ export class LineDrawingService {
     
     // Check if we have anchor constraints - if so, skip line extension
     let skipExtension = false;
-    if (anchors && Array.isArray(anchors) && anchors.length >= 2) {
-      console.log('🔒 Anchor constraints detected - will skip line extension and apply constraints instead');
+    if (anchors && anchors.start && anchors.end) {
+      console.log('🔒 Anchor constraints detected from findHostLineAnchors - will skip line extension');
       skipExtension = true;
+    }
+
+    // Also check if we have any anchors on the line (for T-pieces and valves)
+    // This is critical to prevent line extension when moving components
+    if (!skipExtension && this.canvas) {
+      const allAnchorsOnLine = this.findAllAnchorsOnLine(this.canvas, line);
+      if (allAnchorsOnLine.length > 0) {
+        console.log('🔒 Found', allAnchorsOnLine.length, 'anchors on line - blocking line extension');
+        skipExtension = true;
+      }
     }
     
     // CRITICAL: Extend host line dynamically if T-piece moves beyond bounds (only if no anchor constraints)
