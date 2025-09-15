@@ -285,6 +285,12 @@
       <span class="icon">✋</span>
       <span class="label">Verschieben</span>
     </button>
+    <button class="context-btn" (click)="startMoveComponent()" 
+            [class.active]="drawingService.drawingMode === 'moveComponent'"
+            title="T-Stücke und Ventile auf Rohrleitungen verschieben">
+      <span class="icon">🎯</span>
+      <span class="label">Verschieben-B</span>
+    </button>
     <button class="context-btn" (click)="startFlow()" 
             [class.active]="drawingService.drawingMode === 'flow'"
             title="Fließrichtung">

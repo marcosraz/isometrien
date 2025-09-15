@@ -161,3 +161,4 @@ For any new feature that modifies canvas:
 2. Implement serialization methods if needed
 3. Use executeOperation() wrapper for all modifications
 4. Test undo/redo functionality thoroughly
+- remember how you started it which problems you had now

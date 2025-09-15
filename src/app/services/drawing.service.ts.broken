@@ -17,7 +17,7 @@ import { BehaviorSubject } from 'rxjs';
 export type DrawingMode = 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 
   'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 
   'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 
-  'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' | 'movePipe' | 'moveComponent';
+  'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' | 'movePipe';
 
 // Global counter to track DrawingService instances
 let instanceCounter = 0;
@@ -30,7 +30,6 @@ export class DrawingService {
   redraw$ = this.redrawRequest.asObservable();
   private canvas!: fabric.Canvas;
   private instanceId: number;
-  private hoveredTee: fabric.Rect | null = null;
   
   // Color mode management
   public colorMode: 'drawing' | 'blackwhite' | 'norm' = 'drawing';
@@ -296,12 +295,6 @@ export class DrawingService {
       this.lineDrawingService.handleMovePipeMouseDown(this.canvas, options);
       return;
     }
-    
-    // Handle Move Component Mode (for T-pieces and valves)
-    if (this.lineDrawingService.drawingMode === 'moveComponent') {
-      this.lineDrawingService.handleMoveComponentMouseDown(this.canvas, options);
-      return;
-    }
 
     // Check if freehand mode is active
     if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
@@ -346,10 +339,23 @@ export class DrawingService {
       return;
     }
     
-    // Handle Move Component Mode
-    if (this.lineDrawingService.drawingMode === 'moveComponent') {
-      this.lineDrawingService.handleMoveComponentMouseUp(this.canvas, options);
-      return;
+    // Handle T-Stück/Ventil final position update
+    if (options.target && (options.target as any).originalLineCoords) {
+      const component = options.target;
+      
+      // Lösche temporäre Daten nach der Bewegung
+      delete (component as any).originalLineCoords;
+      delete (component as any).initialMovePosition;
+      
+      // Speichere den finalen Zustand
+      if (this.stateManagementService) {
+        this.stateManagementService.saveState('Move T-Stück/Ventil');
+      }
+      
+      // Render Canvas
+      if (this.canvas) {
+        this.canvas.requestRenderAll();
+      }
     }
   }
 
@@ -374,12 +380,6 @@ export class DrawingService {
       this.lineDrawingService.handleMovePipeMouseMove(this.canvas, options);
       return;
     }
-    
-    // Handle Move Component Mode
-    if (this.lineDrawingService.drawingMode === 'moveComponent') {
-      this.lineDrawingService.handleMoveComponentMouseMove(this.canvas, options);
-      return;
-    }
 
     // Check if freehand mode is active
     if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
@@ -402,10 +402,6 @@ export class DrawingService {
 
     this.lineDrawingService.handleLineMouseMove(this.canvas, options);
     this.lineDrawingService.handlePipeMouseMove(this.canvas, options);
-    
-    // Handle T-piece hover in all modes
-    this.handleGeneralTeeHover(options);
-    
     // Use debounced render for mouse move operations
     this.renderScheduler.debouncedRender(this.canvas);
   }
@@ -455,7 +451,344 @@ export class DrawingService {
   }
 
   public handleObjectMoving(e: any) {
+    const movedObject = e.target;
+    
+    // Prüfe ob es ein T-Stück oder Ventil mit Ankerpunkten ist
+    if (movedObject && (movedObject as any).customType) {
+      const customType = (movedObject as any).customType;
+      
+      // Behandle T-Stück, Ventile mit Ankerpunkten
+      if (customType === 'teeJoint' || customType === 'gateValveS' || customType === 'gateValveFL') {
+        // Prüfe ob das Objekt verbundene Linien hat (auf einer Pipe platziert)
+        const connectedLines = (movedObject as any).connectedLines;
+        console.log('Moving component:', customType, 'Connected lines:', connectedLines);
+        
+        if (connectedLines && connectedLines.length > 0) {
+          // Speichere die initiale Position beim ersten Bewegungsaufruf
+          if (!(movedObject as any).initialMovePosition) {
+            console.log('Saving initial position:', movedObject.left, movedObject.top);
+            (movedObject as any).initialMovePosition = {
+              left: movedObject.left,
+              top: movedObject.top
+            };
+          }
+          this.constrainComponentToLine(movedObject, e);
+        } else {
+          console.log('No connected lines, using free movement');
+          this.moveComponentWithAnchors(movedObject, e);
+        }
+        return;
+      }
+    }
+    
     this.lineDrawingService.handleObjectMoving(this.canvas, e);
+  }
+  
+  private constrainComponentToLine(component: fabric.Object, e: any): void {
+    if (!this.canvas) return;
+    
+    const connectedLines = (component as any).connectedLines;
+    
+    console.log('constrainComponentToLine called:', {
+      connectedLines: connectedLines,
+      connectedLinesLength: connectedLines?.length,
+      componentType: (component as any).customType,
+      hasOriginalLineCoords: !!(component as any).originalLineCoords
+    });
+    
+    if (!connectedLines || connectedLines.length < 2) {
+      // Fallback auf normale Bewegung
+      console.log('Falling back to free movement - no lines found');
+      this.moveComponentWithAnchors(component, e);
+      return;
+    }
+    
+    // Speichere die ursprüngliche Linie beim ersten Mal
+    if (!(component as any).originalLineCoords) {
+      // Rekonstruiere die ursprüngliche Linie aus den beiden Teilen
+      const line1 = connectedLines[0];
+      const line2 = connectedLines[1];
+      
+      // Extrahiere Start- und Endpunkt der gesamten ursprünglichen Linie
+      let startX, startY, endX, endY;
+      
+      // Line1 Startpunkt
+      if (line1.x1 !== undefined) {
+        startX = line1.x1;
+        startY = line1.y1;
+      } else if (line1.getCoords) {
+        const coords = line1.getCoords();
+        if (coords.length >= 2) {
+          startX = coords[0].x;
+          startY = coords[0].y;
+        }
+      }
+      
+      // Line2 Endpunkt  
+      if (line2.x2 !== undefined) {
+        endX = line2.x2;
+        endY = line2.y2;
+      } else if (line2.getCoords) {
+        const coords = line2.getCoords();
+        if (coords.length >= 2) {
+          endX = coords[1].x;
+          endY = coords[1].y;
+        }
+      }
+      
+      if (startX !== undefined && endX !== undefined) {
+        (component as any).originalLineCoords = {
+          startX, startY, endX, endY
+        };
+        console.log('Saved original line coords:', (component as any).originalLineCoords);
+      } else {
+        console.log('Could not extract line coordinates');
+        this.moveComponentWithAnchors(component, e);
+        return;
+      }
+    }
+    
+    // Verwende die gespeicherten Linien-Koordinaten
+    const lineCoords = (component as any).originalLineCoords;
+    const lineStart = { x: lineCoords.startX, y: lineCoords.startY };
+    const lineEnd = { x: lineCoords.endX, y: lineCoords.endY };
+    
+    // Aktuelle Mausposition
+    const pointer = this.canvas.getPointer(e.e);
+    
+    // Projiziere die Mausposition auf die Linie
+    const projection = this.projectPointOntoLine(pointer, lineStart, lineEnd);
+    
+    // Beschränke die Position auf die Linie (mit etwas Puffer an den Enden)
+    const minT = 0.1; // 10% vom Anfang
+    const maxT = 0.9; // 90% vom Ende
+    const clampedT = Math.max(minT, Math.min(maxT, projection.t));
+    
+    // Berechne die neue Position auf der Linie
+    const newX = lineStart.x + (lineEnd.x - lineStart.x) * clampedT;
+    const newY = lineStart.y + (lineEnd.y - lineStart.y) * clampedT;
+    
+    // Setze die Position des T-Stücks (Gruppe)
+    component.set({
+      left: newX,
+      top: newY
+    });
+    component.setCoords();
+    
+    // Aktualisiere die Linien SOFORT für visuelles Feedback
+    this.updateConnectedLinesImmediately(component, newX, newY);
+    
+    // Aktualisiere die Ankerpunkte an den neuen Linienenden
+    this.updateComponentAnchorsOnLines(component, connectedLines);
+    
+    // Canvas neu rendern
+    this.canvas.requestRenderAll();
+  }
+  
+  private updateConnectedLinesImmediately(component: fabric.Object, newX: number, newY: number): void {
+    const connectedLines = (component as any).connectedLines;
+    if (!connectedLines || connectedLines.length < 2) return;
+    
+    const line1 = connectedLines[0];
+    const line2 = connectedLines[1];
+    
+    // Aktualisiere den Endpunkt von line1 zur neuen T-Stück Position
+    if (line1) {
+      if (line1.set) {
+        line1.set({ x2: newX, y2: newY });
+      }
+      if (line1.x2 !== undefined) {
+        line1.x2 = newX;
+        line1.y2 = newY;
+      }
+      if (line1.setCoords) line1.setCoords();
+    }
+    
+    // Aktualisiere den Startpunkt von line2 zur neuen T-Stück Position
+    if (line2) {
+      if (line2.set) {
+        line2.set({ x1: newX, y1: newY });
+      }
+      if (line2.x1 !== undefined) {
+        line2.x1 = newX;
+        line2.y1 = newY;
+      }
+      if (line2.setCoords) line2.setCoords();
+    }
+  }
+  
+  private updateComponentAnchorsOnLines(component: fabric.Object, connectedLines: any[]): void {
+    if (!this.canvas || !connectedLines || connectedLines.length < 2) return;
+    
+    const componentId = (component as any).customId;
+    if (!componentId) return;
+    
+    // Finde alle Ankerpunkte des T-Stücks
+    const anchors = this.canvas.getObjects().filter(obj => 
+      (obj as any).isAnchor && (obj as any).componentId === componentId
+    );
+    
+    if (anchors.length < 3) return; // T-Stück hat 3 Ankerpunkte
+    
+    const line1 = connectedLines[0];
+    const line2 = connectedLines[1];
+    const teeData = (component as any).teeData || {};
+    const angle = teeData.angle || 0;
+    const mirrored = teeData.mirrored || false;
+    const flipped = teeData.flipped || false;
+    const centerX = component.left!;
+    const centerY = component.top!;
+    
+    // Berechne die tatsächliche Rotation
+    let teeAngle = angle;
+    if (mirrored) {
+      teeAngle += 180;
+    }
+    const angleRad = (teeAngle * Math.PI) / 180;
+    const cos = Math.cos(angleRad);
+    const sin = Math.sin(angleRad);
+    
+    // Konstanten für T-Stück Geometrie
+    const segmentLength = 20;
+    const branchLength = 25;
+    const branchAngle = flipped ? -60 : 60;
+    
+    // Ankerpunkt 0: Links auf der Hauptlinie
+    const leftX = centerX - segmentLength * cos;
+    const leftY = centerY - segmentLength * sin;
+    
+    // Ankerpunkt 1: Rechts auf der Hauptlinie
+    const rightX = centerX + segmentLength * cos;
+    const rightY = centerY + segmentLength * sin;
+    
+    // Ankerpunkt 2: Abzweig
+    const branchRad = ((90 + branchAngle) * Math.PI) / 180;
+    const branchEndXLocal = branchLength * Math.cos(branchRad);
+    const branchEndYLocal = branchLength * Math.sin(branchRad);
+    const branchX = centerX + (branchEndXLocal * cos - branchEndYLocal * sin);
+    const branchY = centerY + (branchEndXLocal * sin + branchEndYLocal * cos);
+    
+    // Setze die Ankerpunkt-Positionen
+    if (anchors[0]) {
+      anchors[0].set({ left: leftX, top: leftY });
+      anchors[0].setCoords();
+    }
+    if (anchors[1]) {
+      anchors[1].set({ left: rightX, top: rightY });
+      anchors[1].setCoords();
+    }
+    if (anchors[2]) {
+      anchors[2].set({ left: branchX, top: branchY });
+      anchors[2].setCoords();
+    }
+  }
+  
+  private projectPointOntoLine(point: { x: number, y: number }, lineStart: { x: number, y: number }, lineEnd: { x: number, y: number }): { x: number, y: number, t: number } {
+    const dx = lineEnd.x - lineStart.x;
+    const dy = lineEnd.y - lineStart.y;
+    const lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared === 0) {
+      return { x: lineStart.x, y: lineStart.y, t: 0 };
+    }
+    
+    // Berechne t (Position auf der Linie von 0 bis 1)
+    const t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSquared;
+    
+    // Projizierter Punkt
+    const projectedX = lineStart.x + t * dx;
+    const projectedY = lineStart.y + t * dy;
+    
+    return { x: projectedX, y: projectedY, t: t };
+  }
+  
+  
+  private moveComponentWithAnchors(component: fabric.Object, e: any): void {
+    if (!this.canvas) return;
+    
+    const customType = (component as any).customType;
+    const componentId = (component as any).customId || (component as any).teeId;
+    if (!componentId) return;
+    
+    // Finde alle Ankerpunkte, die zu diesem Component gehören
+    const anchors = this.canvas.getObjects().filter(obj => 
+      (obj as any).isAnchor && ((obj as any).componentId === componentId || (obj as any).teeId === componentId)
+    );
+    
+    // Für T-Stücke: finde auch die zugehörigen Linien
+    let teeLines: fabric.Object[] = [];
+    if (customType === 'teeJoint') {
+      teeLines = this.canvas.getObjects().filter(obj => 
+        (obj as any).teeId === componentId && (obj as any).teePart
+      );
+    }
+    
+    // Berechne die Bewegung relativ zur Komponente
+    const centerPoint = component.getCenterPoint();
+    
+    // Für T-Stücke: Berechne neue Positionen basierend auf der neuen Zentrumsposition
+    if (customType === 'teeJoint') {
+      const newX = centerPoint.x;
+      const newY = centerPoint.y;
+      const teeData = (component as any).teeData;
+      const angle = teeData?.angle || 0;
+      const angleRad = (angle * Math.PI) / 180;
+      const cos = Math.cos(angleRad);
+      const sin = Math.sin(angleRad);
+      
+      const segmentLength = 20;
+      const branchLength = 25;
+      const branchAngle = teeData?.flipped ? -60 : 60;
+      const branchRad = ((90 + branchAngle) * Math.PI) / 180;
+      const branchEndXLocal = branchLength * Math.cos(branchRad);
+      const branchEndYLocal = branchLength * Math.sin(branchRad);
+        
+        if (anchorIndex === 0) {
+          // Linker Ankerpunkt
+          offsetX = -segmentLength * Math.cos(angleRad);
+          offsetY = -segmentLength * Math.sin(angleRad);
+        } else if (anchorIndex === 1) {
+          // Rechter Ankerpunkt
+          offsetX = segmentLength * Math.cos(angleRad);
+          offsetY = segmentLength * Math.sin(angleRad);
+        } else if (anchorIndex === 2) {
+          // Abzweig-Ankerpunkt
+          const branchRad = ((90 + branchAngle) * Math.PI) / 180;
+          const branchEndX = branchLength * Math.cos(branchRad);
+          const branchEndY = branchLength * Math.sin(branchRad);
+          offsetX = branchEndX * Math.cos(angleRad) - branchEndY * Math.sin(angleRad);
+          offsetY = branchEndX * Math.sin(angleRad) + branchEndY * Math.cos(angleRad);
+        }
+      } else if (customType === 'gateValveS' || customType === 'gateValveFL') {
+        // Ventile haben 2 Ankerpunkte
+        const distance = customType === 'gateValveFL' ? 20 : 16;
+        
+        if (anchorIndex === 0) {
+          // Erster Ankerpunkt
+          offsetX = -distance * Math.cos(angleRad);
+          offsetY = -distance * Math.sin(angleRad);
+        } else {
+          // Zweiter Ankerpunkt
+          offsetX = distance * Math.cos(angleRad);
+          offsetY = distance * Math.sin(angleRad);
+        }
+      }
+      
+      // Setze neue Position
+      anchor.set({
+        left: groupCenter.x + offsetX,
+        top: groupCenter.y + offsetY
+      });
+      anchor.setCoords();
+    });
+    
+    // Rendere Canvas neu
+    this.canvas.requestRenderAll();
+  }
+  
+  public updateComponentAnchors(component: fabric.Object): void {
+    // Öffentliche Methode für die Canvas-Komponente
+    this.moveComponentWithAnchors(component, null);
   }
 
   public cancelDrawing(): void {
@@ -466,9 +799,6 @@ export class DrawingService {
       this.dimensionService.stopDimensioning();
       this.dimensionService.clearTemporaryDimensionAnchors(this.canvas);
     }
-    // Reset T-piece highlights
-    this.resetGeneralTeeHighlight();
-    
     // Deselect any active object and clear top context
     if (this.canvas) {
       this.canvas.discardActiveObject();
@@ -754,120 +1084,6 @@ export class DrawingService {
       }
     });
     
-    this.canvas.requestRenderAll();
-  }
-
-  private handleGeneralTeeHover(options: any): void {
-    if (!this.canvas) return;
-
-    // Skip if we're in a mode that already handles T-piece hover
-    if (this.pipingService.isActive() || this.lineDrawingService.drawingMode === 'moveComponent') {
-      return;
-    }
-
-    const pointer = this.canvas.getPointer(options.e);
-    
-    // Find T-piece objects near mouse
-    const teeObjects = this.canvas.getObjects().filter(obj => 
-      (obj as any).customType === 'teeJoint'
-    );
-
-    let hoveredTee = null;
-    let minDistance = Infinity;
-
-    // Check each T-piece for hover
-    for (const teeObj of teeObjects) {
-      const teeRect = teeObj as fabric.Rect;
-      const bounds = teeRect.getBoundingRect();
-      
-      // Expand hover area around T-piece
-      const expandedBounds = {
-        left: bounds.left - 15,
-        top: bounds.top - 15,
-        width: bounds.width + 30,
-        height: bounds.height + 30
-      };
-
-      // Check if mouse is over expanded area
-      if (pointer.x >= expandedBounds.left && 
-          pointer.x <= expandedBounds.left + expandedBounds.width &&
-          pointer.y >= expandedBounds.top && 
-          pointer.y <= expandedBounds.top + expandedBounds.height) {
-        
-        // Calculate distance to T-piece center
-        const centerX = bounds.left + bounds.width / 2;
-        const centerY = bounds.top + bounds.height / 2;
-        const distance = Math.sqrt((pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2);
-        
-        if (distance < minDistance) {
-          hoveredTee = teeRect;
-          minDistance = distance;
-        }
-      }
-    }
-
-    // Reset previous T-piece highlight
-    if (this.hoveredTee && this.hoveredTee !== hoveredTee) {
-      this.resetGeneralTeeHighlight();
-    }
-
-    // Highlight new T-piece
-    if (hoveredTee && hoveredTee !== this.hoveredTee) {
-      this.hoveredTee = hoveredTee;
-      this.highlightGeneralTee(hoveredTee);
-    } else if (!hoveredTee && this.hoveredTee) {
-      this.resetGeneralTeeHighlight();
-    }
-  }
-
-  private highlightGeneralTee(teeRect: fabric.Rect): void {
-    if (!this.canvas || !teeRect) return;
-
-    // Get T-piece lines
-    const teeLines = (teeRect as any).teeLines || [];
-
-    // Highlight all T-piece lines in green
-    teeLines.forEach((line: any) => {
-      if (line && typeof line.set === 'function') {
-        // Store original color if not already stored
-        if (!(line as any).originalStroke) {
-          (line as any).originalStroke = line.stroke;
-        }
-        line.set('stroke', '#4CAF50'); // Green hover color
-      }
-    });
-
-    // Make selection rectangle slightly visible
-    teeRect.set({
-      fill: 'rgba(76, 175, 80, 0.1)', // Light green background
-      stroke: '#4CAF50',
-      strokeWidth: 1,
-      opacity: 0.2
-    });
-
-    this.canvas.requestRenderAll();
-  }
-
-  private resetGeneralTeeHighlight(): void {
-    if (!this.canvas || !this.hoveredTee) return;
-
-    // Reset T-piece lines to original color
-    const teeLines = (this.hoveredTee as any).teeLines || [];
-    teeLines.forEach((line: any) => {
-      if (line && typeof line.set === 'function' && (line as any).originalStroke) {
-        line.set('stroke', (line as any).originalStroke);
-      }
-    });
-
-    // Reset selection rectangle
-    this.hoveredTee.set({
-      fill: 'transparent',
-      stroke: 'transparent', 
-      strokeWidth: 0,
-      opacity: 0.1
-    });
-
-    this.hoveredTee = null;
     this.canvas.requestRenderAll();
   }
 }

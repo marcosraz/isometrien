@@ -179,6 +179,15 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
           }
           this.canvas.requestRenderAll();
         } else if (!((obj as any).isDimensionPart)) {
+          // Aktualisiere finale Positionen für T-Stücke und Ventile mit Ankerpunkten
+          if (obj && (obj as any).customType) {
+            const customObjType = (obj as any).customType;
+            if (customObjType === 'teeJoint' || customObjType === 'gateValveS' || customObjType === 'gateValveFL') {
+              // Ankerpunkte werden automatisch mit der Komponente bewegt
+              // Keine zusätzliche Aktualisierung erforderlich
+            }
+          }
+          
           // Only save state for non-dimension object modifications
           this.stateManagement.executeOperation('Modify Object', () => {
             // Modification already completed

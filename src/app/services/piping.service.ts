@@ -22,11 +22,15 @@ export class PipingService {
   private teeJointMode: boolean = false;
   private previewArrow: fabric.Group | null = null;
   private previewValve: fabric.Group | null = null;
-  private previewTee: fabric.Group | null = null;
+  private previewTee: any = null;
+  private previewTeeLines: fabric.Object[] = [];
+  private previewTeeAnchors: fabric.Circle[] = [];
   private isShiftPressed: boolean = false;
   private isCtrlPressed: boolean = false;
   private hoveredLine: fabric.Line | fabric.Path | null = null;
   private originalLineStroke: string | null = null;
+  private hoveredTee: fabric.Rect | null = null;
+  private hoveredTeeLines: fabric.Object[] = [];
 
   constructor() {
     // Listen for keyboard events
@@ -99,6 +103,7 @@ export class PipingService {
     this.flowMode = false;
     this.cleanupPreview();
     this.resetLineHighlight();
+    this.resetTeeHighlight();
   }
 
   public isFlowModeActive(): boolean {
@@ -219,6 +224,7 @@ export class PipingService {
     this.teeJointMode = false;
     this.cleanupTeePreview();
     this.resetLineHighlight();
+    this.resetTeeHighlight();
   }
   
   public isTeeJointModeActive(): boolean {
@@ -240,9 +246,24 @@ export class PipingService {
   }
   
   private cleanupTeePreview(): void {
-    if (this.previewTee && this.canvas) {
-      this.canvas.remove(this.previewTee);
-      this.previewTee = null;
+    if (this.canvas) {
+      // Remove preview lines
+      this.previewTeeLines.forEach(line => {
+        this.canvas!.remove(line);
+      });
+      this.previewTeeLines = [];
+      
+      // Remove preview anchors
+      this.previewTeeAnchors.forEach(anchor => {
+        this.canvas!.remove(anchor);
+      });
+      this.previewTeeAnchors = [];
+      
+      // Remove preview selection rect if exists
+      if (this.previewTee) {
+        this.canvas.remove(this.previewTee);
+        this.previewTee = null;
+      }
     }
   }
 
@@ -253,6 +274,115 @@ export class PipingService {
       this.originalLineStroke = null;
       this.canvas?.requestRenderAll();
     }
+  }
+
+  private handleTeeHover(pointer: { x: number; y: number }): void {
+    if (!this.canvas) return;
+
+    // Finde alle T-Stück-Objekte in der Nähe der Maus
+    const teeObjects = this.canvas.getObjects().filter(obj => 
+      (obj as any).customType === 'teeJoint'
+    );
+
+    let hoveredTee = null;
+    let minDistance = Infinity;
+
+    // Prüfe jeden T-Stück für Hover
+    for (const teeObj of teeObjects) {
+      const teeRect = teeObj as fabric.Rect;
+      const bounds = teeRect.getBoundingRect();
+      
+      // Erweitere den Hover-Bereich um das T-Stück
+      const expandedBounds = {
+        left: bounds.left - 10,
+        top: bounds.top - 10,
+        width: bounds.width + 20,
+        height: bounds.height + 20
+      };
+
+      // Prüfe, ob die Maus über dem erweiterten Bereich ist
+      if (pointer.x >= expandedBounds.left && 
+          pointer.x <= expandedBounds.left + expandedBounds.width &&
+          pointer.y >= expandedBounds.top && 
+          pointer.y <= expandedBounds.top + expandedBounds.height) {
+        
+        // Berechne die Distanz zur Mitte des T-Stücks
+        const centerX = bounds.left + bounds.width / 2;
+        const centerY = bounds.top + bounds.height / 2;
+        const distance = Math.sqrt((pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2);
+        
+        if (distance < minDistance) {
+          hoveredTee = teeRect;
+          minDistance = distance;
+        }
+      }
+    }
+
+    // Reset previous T-Stück highlight
+    if (this.hoveredTee && this.hoveredTee !== hoveredTee) {
+      this.resetTeeHighlight();
+    }
+
+    // Highlight neues T-Stück
+    if (hoveredTee && hoveredTee !== this.hoveredTee) {
+      this.hoveredTee = hoveredTee;
+      this.highlightTee(hoveredTee);
+    } else if (!hoveredTee && this.hoveredTee) {
+      this.resetTeeHighlight();
+    }
+  }
+
+  private highlightTee(teeRect: fabric.Rect): void {
+    if (!this.canvas || !teeRect) return;
+
+    // Hole die T-Stück Linien
+    const teeLines = (teeRect as any).teeLines || [];
+    this.hoveredTeeLines = [];
+
+    // Highlight alle T-Stück Linien in grün
+    teeLines.forEach((line: any) => {
+      if (line && typeof line.set === 'function') {
+        // Speichere die originale Farbe falls noch nicht gespeichert
+        if (!(line as any).originalStroke) {
+          (line as any).originalStroke = line.stroke;
+        }
+        line.set('stroke', '#4CAF50'); // Grüne Hover-Farbe
+        this.hoveredTeeLines.push(line);
+      }
+    });
+
+    // Mache das Selektions-Rechteck leicht sichtbar
+    teeRect.set({
+      fill: 'rgba(76, 175, 80, 0.2)', // Leicht grüner Hintergrund
+      stroke: '#4CAF50',
+      strokeWidth: 2,
+      opacity: 0.3
+    });
+
+    this.canvas.requestRenderAll();
+  }
+
+  private resetTeeHighlight(): void {
+    if (!this.canvas || !this.hoveredTee) return;
+
+    // Reset T-Stück Linien zu ihrer ursprünglichen Farbe
+    this.hoveredTeeLines.forEach((line: any) => {
+      if (line && typeof line.set === 'function' && (line as any).originalStroke) {
+        line.set('stroke', (line as any).originalStroke);
+      }
+    });
+
+    // Reset das Selektions-Rechteck
+    this.hoveredTee.set({
+      fill: 'transparent',
+      stroke: 'transparent',
+      strokeWidth: 0,
+      opacity: 0.1
+    });
+
+    this.hoveredTee = null;
+    this.hoveredTeeLines = [];
+    this.canvas.requestRenderAll();
   }
 
   private findNearestLine(point: { x: number; y: number }): { line: fabric.Line | fabric.Path; closestPoint: { x: number; y: number }; distance: number } | null {
@@ -1242,6 +1372,10 @@ export class PipingService {
     
     const pointer = this.canvas.getPointer(options.e);
     const threshold = this.isShiftPressed ? 100 : 50; // Larger snap distance with Shift
+    
+    // Spezielle Behandlung für T-Stück Hover-Events
+    this.handleTeeHover(pointer);
+    
     const nearest = this.findNearestLine(pointer);
     
     // Reset previous highlight
@@ -1305,7 +1439,7 @@ export class PipingService {
         // Update preview T-Stück
         this.cleanupTeePreview();
         
-        this.previewTee = createTeeJoint(
+        const teeJoint = createTeeJoint(
           nearest.closestPoint.x, 
           nearest.closestPoint.y, 
           angle,
@@ -1313,13 +1447,37 @@ export class PipingService {
           this.isShiftPressed  // Shift für Seitenwechsel
         );
         
-        if (this.previewTee) {
-          this.previewTee.set({
-            opacity: 0.7,
-            selectable: false,
-            evented: false
-          });
-          this.canvas.add(this.previewTee);
+        if (teeJoint) {
+          // Store the selection rect for cleanup
+          this.previewTee = teeJoint;
+          
+          // Add preview lines with reduced opacity
+          const lines = (teeJoint as any).lines;
+          if (lines) {
+            lines.forEach((line: any) => {
+              line.set({
+                opacity: 0.5,
+                selectable: false,
+                evented: false
+              });
+              this.canvas!.add(line);
+              this.previewTeeLines.push(line);
+            });
+          }
+          
+          // Add preview anchors with reduced opacity
+          const anchors = (teeJoint as any).anchors;
+          if (anchors) {
+            anchors.forEach((anchor: fabric.Circle) => {
+              anchor.set({
+                opacity: 0.5,
+                selectable: false,
+                evented: false
+              });
+              this.canvas!.add(anchor);
+              this.previewTeeAnchors.push(anchor);
+            });
+          }
         }
       }
     } else {
@@ -1327,6 +1485,7 @@ export class PipingService {
       this.cleanupValvePreview();
       this.cleanupTeePreview();
       this.resetLineHighlight();
+      this.resetTeeHighlight();
     }
     
     this.canvas.requestRenderAll();
@@ -1753,39 +1912,63 @@ export class PipingService {
           this.stateManagement.executeOperation('Add T-Stück', () => {
             // Teile die Linie am T-Stück
             this.splitLineAtValve(nearest.line, nearest.closestPoint, teeJoint, true);
-            
-            // Füge T-Stück hinzu
-            this.canvas!.add(teeJoint);
-            
-            // Füge Ankerpunkte hinzu - sie sind bereits mit absoluten Positionen erstellt
+
+            // WICHTIG: Die connectedLines wurden jetzt von splitLineAtValve gesetzt
+            console.log('T-Stück connectedLines nach Split:', (teeJoint as any).connectedLines?.length || 0);
+
+            // Füge die T-Stück Linien hinzu
+            const lines = (teeJoint as any).lines;
+            if (lines) {
+              lines.forEach((line: any) => {
+                this.canvas!.add(line);
+              });
+            }
+
+            // Füge die Ankerpunkte hinzu
             const anchors = (teeJoint as any).anchors;
             if (anchors) {
               anchors.forEach((anchor: fabric.Circle) => {
                 // Verknüpfe Ankerpunkt mit T-Stück über componentId
                 (anchor as any).componentId = componentId;
-                // Ankerpunkte haben bereits die korrekten absoluten Positionen
                 this.canvas!.add(anchor);
               });
             }
-            
+
+            // Füge das Selektions-Rechteck hinzu (für Interaktion)
+            this.canvas!.add(teeJoint);
+
+            // Stelle sicher, dass das T-Stück im Vordergrund ist
             this.canvas!.bringObjectToFront(teeJoint);
             this.canvas!.requestRenderAll();
           });
         } else {
           this.splitLineAtValve(nearest.line, nearest.closestPoint, teeJoint, true);
-          this.canvas.add(teeJoint);
-          
-          // Füge Ankerpunkte hinzu - sie sind bereits mit absoluten Positionen erstellt
+
+          // WICHTIG: Die connectedLines wurden jetzt von splitLineAtValve gesetzt
+          console.log('T-Stück connectedLines nach Split:', (teeJoint as any).connectedLines?.length || 0);
+
+          // Füge die T-Stück Linien hinzu
+          const lines = (teeJoint as any).lines;
+          if (lines) {
+            lines.forEach((line: any) => {
+              this.canvas!.add(line);
+            });
+          }
+
+          // Füge die Ankerpunkte hinzu
           const anchors = (teeJoint as any).anchors;
           if (anchors) {
             anchors.forEach((anchor: fabric.Circle) => {
               // Verknüpfe Ankerpunkt mit T-Stück über componentId
               (anchor as any).componentId = componentId;
-              // Ankerpunkte haben bereits die korrekten absoluten Positionen
               this.canvas!.add(anchor);
             });
           }
-          
+
+          // Füge das Selektions-Rechteck hinzu (für Interaktion)
+          this.canvas.add(teeJoint);
+
+          // Stelle sicher, dass das T-Stück im Vordergrund ist
           this.canvas.bringObjectToFront(teeJoint);
           this.canvas.requestRenderAll();
         }
@@ -1797,7 +1980,7 @@ export class PipingService {
     }
   }
 
-  private splitLineAtValve(line: fabric.Line | fabric.Path, valvePosition: { x: number; y: number }, valve: fabric.Group, isFLVariant: boolean = false): void {
+  private splitLineAtValve(line: fabric.Line | fabric.Path, valvePosition: { x: number; y: number }, valve: any, isFLVariant: boolean = false): void {
     if (!this.canvas) return;
     
     if (line.type === 'line') {
@@ -1851,6 +2034,11 @@ export class PipingService {
         (valve as any).connectedLines = [];
       }
       (valve as any).connectedLines.push(line1, line2);
+      
+      // Setze die Linien auch auf dem teeData objekt falls es ein T-Stück ist
+      if ((valve as any).customType === 'teeJoint' && (valve as any).teeData) {
+        (valve as any).teeData.connectedLines = [line1, line2];
+      }
       
       // Speichere die Host-Linie und Position für das Ventil/T-Stück
       // Die Komponente liegt genau in der Mitte zwischen den beiden neuen Linien

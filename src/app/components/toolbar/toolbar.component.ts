@@ -376,6 +376,11 @@ export class ToolbarComponent {
     this.drawingService.setDrawingMode('ballValveFL');
   }
 
+  public startMoveComponent(): void {
+    this.drawingService.setDrawingMode('moveComponent');
+    console.log('Move Component Modus (Verschieben-B) aktiviert - für T-Stücke und Ventile');
+  }
+
   // New UI Methods
   public toggleSidebar(): void {
     this.sidebarCollapsed = !this.sidebarCollapsed;
@@ -533,5 +538,45 @@ export class ToolbarComponent {
   
   public printCanvas(): void {
     this.exportService.printCanvas();
+  }
+  
+  public showPipingMenu(): void {
+    const choice = prompt(
+      'ROHRLEITUNGEN-MENÜ:\n\n' +
+      '1 - Rohrleitungen zeichnen (P)\n' +
+      '2 - Rohrleitungen verschieben (M)\n' +
+      '3 - T-Stück/Ventil verschieben (Verschieben-B)\n' +
+      '4 - T-Stück einfügen\n' +
+      '5 - Ventile einfügen\n\n' +
+      'Wähle eine Option (1-5):'
+    );
+    
+    switch(choice) {
+      case '1':
+        this.drawingService.setDrawingMode('addPipe');
+        console.log('⚙️ Rohrleitungen zeichnen aktiviert');
+        break;
+      case '2':
+        this.drawingService.setDrawingMode('movePipe' as any);
+        console.log('⚙️ Rohrleitungen verschieben aktiviert');
+        break;
+      case '3':
+        this.startMoveComponent();
+        console.log('⚙️ T-Stück/Ventil verschieben aktiviert');
+        break;
+      case '4':
+        // T-Stück einfügen - hier könnte ein weiterer Modus kommen
+        alert('T-Stück einfügen wird in einer zukünftigen Version verfügbar sein.');
+        break;
+      case '5':
+        // Ventile einfügen
+        alert('Ventile einfügen wird in einer zukünftigen Version verfügbar sein.');
+        break;
+      default:
+        if (choice !== null) {
+          alert('Ungültige Auswahl. Bitte wähle 1-5.');
+        }
+        break;
+    }
   }
 }

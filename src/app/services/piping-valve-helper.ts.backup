@@ -264,8 +264,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
     selectable: true,
     hasControls: true,
     hasBorders: true,
-    evented: true,  // Ermöglicht Hover-Events
-    opacity: 0.1  // Leicht sichtbar für bessere Interaktion
+    opacity: 0.01  // Fast unsichtbar, aber noch interaktiv
   });
   
   (selectionRect as any).customType = 'teeJoint';

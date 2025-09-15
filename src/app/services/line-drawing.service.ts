@@ -21,7 +21,7 @@ export interface EditableLine {
   providedIn: 'root',
 })
 export class LineDrawingService {
-  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe' = 'idle';
+  public drawingMode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe' | 'moveComponent' = 'idle';
   public lineStartPoint: { x: number; y: number } | null = null;
   public pipePoints: { x: number; y: number }[] = [];
   private previewLine: fabric.Line | null = null;
@@ -36,9 +36,9 @@ export class LineDrawingService {
   private anchorPreview: fabric.Circle | null = null;
   private highlightedAnchor: fabric.Object | null = null;
   private originalAnchorColor: string | null = null;
-  private highlightedComponent: fabric.Group | null = null;
+  private highlightedComponent: any | null = null;
   private originalComponentStroke: string | null = null;
-  private movingComponent: fabric.Group | null = null;
+  private movingComponent: any | null = null;
 
   // Move Mode Variablen
   private highlightedSegment: fabric.Object | null = null;
@@ -47,6 +47,10 @@ export class LineDrawingService {
   private movingPipe: EditablePipe | null = null;
   private movingSegmentIndex: number = -1;
   private moveStartPoint: { x: number; y: number } | null = null;
+  // Store original line coordinates for proper movement
+  // Removed originalLineCoords - now using originalLeft/originalTop for line movement
+  private originalLeft: number | null = null;
+  private originalTop: number | null = null;
   // Endpunkt-Verschiebung
   private movingAnchor: fabric.Circle | null = null;
   private movingAnchorIndex: number = -1;
@@ -81,8 +85,10 @@ export class LineDrawingService {
   }
 
   public setDrawingMode(
-    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe'
+    mode: 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 'spool' | 'testLine' | 'teeJoint' | 'slope' | 'freehand' | 'movePipe' | 'moveComponent'
   ): void {
+    console.log(`🔧 LineDrawingService.setDrawingMode called with: ${mode}, current: ${this.drawingMode}`);
+    console.log('🔧 Canvas available in setDrawingMode:', !!this.canvas);
     if (this.drawingMode === 'addPipe' && mode !== 'addPipe') {
       // Aufräumen beim Verlassen des Pipe-Modus
       this.cancelPipeDrawing(this.canvas);
@@ -94,7 +100,171 @@ export class LineDrawingService {
         this.anchorPreview = null;
       }
     }
+    
+    // Setup moveComponent mode
+    if (mode === 'moveComponent' && this.canvas) {
+      console.log('🎯 Entering moveComponent mode - making T-pieces selectable');
+      // Make T-pieces selectable and add hover effects
+      this.canvas.getObjects().forEach(obj => {
+        if ((obj as any).customType === 'teeJoint') {
+          console.log('Found T-piece, making it selectable:', obj);
+          obj.set({
+            selectable: true,
+            evented: true,
+            hoverCursor: 'move'
+          });
+          
+          // Get the T-piece lines for hover effects
+          const tpiece = obj as any;
+          if (tpiece.teeLines) {
+            // Add hover effects to each T-piece line so hovering over visible lines triggers the effect
+            tpiece.teeLines.forEach((line: any, index: number) => {
+              if (line) {
+                // Clear any existing hover handlers to prevent duplicates
+                line.off('mouseover');
+                line.off('mouseout');
+                
+                // Add hover effect to individual lines
+                line.on('mouseover', () => {
+                  if (this.drawingMode === 'moveComponent') {
+                    console.log(`🟢 T-piece line ${index} hover - highlighting all lines in green`);
+                    tpiece.teeLines.forEach((tLine: any) => {
+                      if (tLine) {
+                        (tLine as any).originalStroke = (tLine as any).originalStroke || tLine.stroke;
+                        tLine.set('stroke', '#4CAF50'); // Green hover highlight
+                      }
+                    });
+                    this.canvas!.requestRenderAll();
+                  }
+                });
+                
+                // Remove hover effect when mouse leaves the line
+                line.on('mouseout', () => {
+                  if (this.drawingMode === 'moveComponent') {
+                    console.log(`🟢 T-piece line ${index} mouseout - removing green highlight`);
+                    tpiece.teeLines.forEach((tLine: any) => {
+                      if (tLine && (tLine as any).originalStroke) {
+                        tLine.set('stroke', (tLine as any).originalStroke);
+                        delete (tLine as any).originalStroke;
+                      }
+                    });
+                    this.canvas!.requestRenderAll();
+                  }
+                });
+              }
+            });
+          }
+        }
+      });
+      this.hoverEffectsSetup = true;
+      this.canvas.renderAll();
+    }
+    
+    // Cleanup moveComponent mode
+    if (this.drawingMode === 'moveComponent' && mode !== 'moveComponent' && this.canvas) {
+      console.log('🎯 Leaving moveComponent mode - resetting T-pieces');
+      // Reset T-pieces to non-selectable and remove event listeners
+      this.canvas.getObjects().forEach(obj => {
+        if ((obj as any).customType === 'teeJoint') {
+          // Remove hover effects and event listeners from lines
+          if ((obj as any).teeLines) {
+            (obj as any).teeLines.forEach((line: any) => {
+              if (line) {
+                // Remove event listeners from individual lines
+                line.off('mouseover');
+                line.off('mouseout');
+                
+                // Reset stroke color if modified
+                if ((line as any).originalStroke) {
+                  line.set('stroke', (line as any).originalStroke);
+                  delete (line as any).originalStroke;
+                }
+              }
+            });
+          }
+          
+          // Remove event listeners from selection rectangle (not needed anymore since we use line events)
+          obj.off('mouseover');
+          obj.off('mouseout');
+          
+          obj.set({
+            selectable: false,
+            evented: false
+          });
+        }
+      });
+      this.canvas.renderAll();
+      
+      // Reset hover effects setup flag
+      this.hoverEffectsSetup = false;
+    }
+    
     this.drawingMode = mode;
+  }
+
+  private ensureHoverEffectsSetup(canvas: fabric.Canvas): void {
+    if (this.hoverEffectsSetup) {
+      console.log('🔧 Hover effects already set up, skipping');
+      return;
+    }
+
+    console.log('🔧 Setting up hover effects as fallback');
+    
+    // Make T-pieces selectable and add hover effects
+    canvas.getObjects().forEach(obj => {
+      if ((obj as any).customType === 'teeJoint') {
+        console.log('🔧 Found T-piece, setting up hover effects:', obj);
+        obj.set({
+          selectable: true,
+          evented: true,
+          hoverCursor: 'move'
+        });
+        
+        // Get the T-piece lines for hover effects
+        const tpiece = obj as any;
+        if (tpiece.teeLines) {
+          // Add hover effects to each T-piece line so hovering over visible lines triggers the effect
+          tpiece.teeLines.forEach((line: any, index: number) => {
+            if (line) {
+              // Clear any existing hover handlers to prevent duplicates
+              line.off('mouseover');
+              line.off('mouseout');
+              
+              // Add hover effect to individual lines
+              line.on('mouseover', () => {
+                if (this.drawingMode === 'moveComponent') {
+                  console.log(`🟢 T-piece line ${index} hover - highlighting all lines in green`);
+                  tpiece.teeLines.forEach((tLine: any) => {
+                    if (tLine) {
+                      (tLine as any).originalStroke = (tLine as any).originalStroke || tLine.stroke;
+                      tLine.set('stroke', '#4CAF50'); // Green hover highlight
+                    }
+                  });
+                  canvas.requestRenderAll();
+                }
+              });
+              
+              // Remove hover effect when mouse leaves the line
+              line.on('mouseout', () => {
+                if (this.drawingMode === 'moveComponent') {
+                  console.log(`🟢 T-piece line ${index} mouseout - removing green highlight`);
+                  tpiece.teeLines.forEach((tLine: any) => {
+                    if (tLine && (tLine as any).originalStroke) {
+                      tLine.set('stroke', (tLine as any).originalStroke);
+                      delete (tLine as any).originalStroke;
+                    }
+                  });
+                  canvas.requestRenderAll();
+                }
+              });
+            }
+          });
+        }
+      }
+    });
+    
+    this.hoverEffectsSetup = true;
+    canvas.renderAll();
   }
 
   private resetAnchorHighlight(): void {
@@ -1448,6 +1618,7 @@ export class LineDrawingService {
   public handleMovePipeMouseMove(canvas: fabric.Canvas, options: any): void {
     if (!canvas) return;
     
+    console.log('🔥🔥🔥 VERSION 2024-11-19 19:15 - NEUE VERSION LÄUFT! 🔥🔥🔥');
     const pointer = canvas.getPointer(options.e);
     
     // Wenn wir gerade eine Komponente (T-Stück/Ventil) verschieben
@@ -1489,13 +1660,27 @@ export class LineDrawingService {
     
     // Reset vorheriges Komponenten-Highlight
     if (this.highlightedComponent && this.originalComponentStroke) {
-      const objects = (this.highlightedComponent as fabric.Group).getObjects();
-      objects.forEach(obj => {
-        if ((obj as any).originalStroke) {
-          obj.set('stroke', (obj as any).originalStroke);
-          delete (obj as any).originalStroke;
+      // Prüfe ob es ein T-Stück mit neuer Struktur ist
+      if ((this.highlightedComponent as any).customType === 'teeJoint') {
+        const teeLines = (this.highlightedComponent as any).teeLines;
+        if (teeLines && Array.isArray(teeLines)) {
+          teeLines.forEach((line: any) => {
+            if ((line as any).originalStroke) {
+              line.set('stroke', (line as any).originalStroke);
+              delete (line as any).originalStroke;
+            }
+          });
         }
-      });
+      } else if (this.highlightedComponent.type === 'group') {
+        // Normale Ventile als Groups
+        const objects = (this.highlightedComponent as fabric.Group).getObjects();
+        objects.forEach((obj: any) => {
+          if (obj.originalStroke) {
+            obj.set('stroke', obj.originalStroke);
+            delete obj.originalStroke;
+          }
+        });
+      }
       this.highlightedComponent = null;
       this.originalComponentStroke = null;
     }
@@ -1503,12 +1688,11 @@ export class LineDrawingService {
     // Prüfe zuerst T-Stücke und Ventile (höchste Priorität für direktes Verschieben)
     let foundComponent = false;
     canvas.getObjects().forEach(obj => {
-      if (!foundComponent && obj.type === 'group') {
+      if (!foundComponent) {
         const customType = (obj as any).customType;
-        if (customType === 'teeJoint' || customType === 'gateValveS' || customType === 'gateValveFL' || 
-            customType === 'globeValveS' || customType === 'globeValveFL' ||
-            customType === 'ballValveS' || customType === 'ballValveFL') {
-          
+        
+        // Prüfe für neue T-Stück-Struktur (Rectangle mit customType)
+        if (obj.type === 'rect' && customType === 'teeJoint') {
           const componentX = obj.left || 0;
           const componentY = obj.top || 0;
           const distance = Math.sqrt(
@@ -1516,24 +1700,67 @@ export class LineDrawingService {
             Math.pow(pointer.y - componentY, 2)
           );
           
-          if (distance < 15) { // 15 Pixel Toleranz für Komponenten
-            // Highlighte die Komponente
-            this.highlightedComponent = obj as fabric.Group;
-            const objects = (obj as fabric.Group).getObjects();
-            objects.forEach(innerObj => {
-              if (innerObj.stroke) {
-                (innerObj as any).originalStroke = innerObj.stroke;
-                innerObj.set('stroke', '#00ff00'); // Grün für Highlight
-              }
-            });
+          if (distance < 30) { // Größere Toleranz für T-Stück-Rechteck
+            // Highlighte die T-Stück-Linien
+            this.highlightedComponent = obj as any;
+            
+            // Clear stored host line so it gets recalculated when movement starts
+            delete (obj as any).hostLine;
+            delete (obj as any).linePosition;
+            delete (obj as any).hostLineSearched;
+            
+            const teeLines = (obj as any).teeLines;
+            if (teeLines && Array.isArray(teeLines)) {
+              teeLines.forEach((line: any) => {
+                if (line && line.stroke) {
+                  (line as any).originalStroke = line.stroke;
+                  line.set('stroke', '#00ff00'); // Grün für Highlight
+                }
+              });
+            }
+            // Setze den Cursor auf move für T-Stücke
+            canvas.defaultCursor = 'move';
             canvas.requestRenderAll();
             foundComponent = true;
+          }
+        }
+        // Prüfe für normale Ventile (bleiben als Groups)
+        else if (obj.type === 'group') {
+          if (customType === 'gateValveS' || customType === 'gateValveFL' || 
+              customType === 'globeValveS' || customType === 'globeValveFL' ||
+              customType === 'ballValveS' || customType === 'ballValveFL') {
+            
+            const componentX = obj.left || 0;
+            const componentY = obj.top || 0;
+            const distance = Math.sqrt(
+              Math.pow(pointer.x - componentX, 2) + 
+              Math.pow(pointer.y - componentY, 2)
+            );
+            
+            if (distance < 15) { // 15 Pixel Toleranz für Komponenten
+              // Highlighte die Komponente
+              this.highlightedComponent = obj as fabric.Group;
+              const objects = (obj as fabric.Group).getObjects();
+              objects.forEach(innerObj => {
+                if (innerObj.stroke) {
+                  (innerObj as any).originalStroke = innerObj.stroke;
+                  innerObj.set('stroke', '#00ff00'); // Grün für Highlight
+                }
+              });
+              // Setze den Cursor auf move für Ventile
+              canvas.defaultCursor = 'move';
+              canvas.requestRenderAll();
+              foundComponent = true;
+            }
           }
         }
       }
     });
     
     if (foundComponent) return;
+    
+    // Reset cursor wenn keine Komponente gefunden
+    canvas.defaultCursor = 'default';
     
     // Dann prüfe Ankerpunkte (zweite Priorität)
     for (const pipe of this.editablePipes) {
@@ -1565,6 +1792,11 @@ export class LineDrawingService {
         continue;
       }
       
+      // Ignoriere T-Stück-Linien (sie haben eine teeId)
+      if ((obj as any).teeId || (obj as any).teePart) {
+        continue;
+      }
+      
       if ((obj.type === 'line' || obj.type === 'path') && this.isPointNearLine(pointer, obj)) {
         // Prüfe erst ob es Teil einer EditablePipe ist
         let isPipeSegment = false;
@@ -1581,8 +1813,23 @@ export class LineDrawingService {
         if (!isPipeSegment && obj.type === 'line') {
           // Prüfe ob es eine normale Linie ist (nicht Teil einer Gruppe oder speziellen Komponente)
           const line = obj as fabric.Line;
-          // Zusätzliche Prüfung: Ist es eine sichtbare, selektierbare Linie?
-          if (line.visible !== false && line.selectable !== false) {
+          
+          // Debug-Log für die Linie
+          console.log('Checking line for highlighting:', {
+            stroke: line.stroke,
+            selectable: line.selectable,
+            visible: line.visible,
+            customType: (line as any).customType,
+            x1: line.x1,
+            y1: line.y1,
+            x2: line.x2,
+            y2: line.y2
+          });
+          
+          // Eine Linie ist verschiebbar, wenn sie sichtbar ist
+          // und NICHT explizit als nicht-selektierbar markiert ist
+          if (line.visible !== false) {
+            console.log('Line is visible and will be highlighted');
             // Highlighte die Linie
             this.highlightedSegment = obj;
             this.originalSegmentStroke = obj.get('stroke') as string;
@@ -1604,50 +1851,110 @@ export class LineDrawingService {
     canvas.requestRenderAll();
   }
   
-  private findHostLineForComponent(canvas: fabric.Canvas, component: fabric.Group): void {
+  private findHostLineForComponent(canvas: fabric.Canvas, component: any): void {
     const componentX = component.left || 0;
     const componentY = component.top || 0;
     let closestLine: fabric.Line | null = null;
     let closestDistance = Infinity;
     let closestT = 0.5;
     
+    console.log('🔎 findHostLineForComponent: Searching for host line for component at', {
+      x: componentX,
+      y: componentY,
+      type: component.type,
+      customType: (component as any).customType
+    });
+    
+    let linesChecked = 0;
+    let linesSkipped = {
+      teeLines: 0,
+      greenLines: 0,
+      transparentLines: 0,
+      dimensionLines: 0,
+      total: 0
+    };
+    
     // Suche die nächste Linie
-    canvas.getObjects().forEach(obj => {
-      if (obj.type === 'line' && !(obj as any).isDimensionPart) {
+    const allObjects = canvas.getObjects();
+    console.log(`📊 Total canvas objects: ${allObjects.length}`);
+    
+    allObjects.forEach(obj => {
+      if (obj.type === 'line') {
         const line = obj as fabric.Line;
+        linesChecked++;
+        
+        // Skip dimension lines
+        if ((obj as any).isDimensionPart) {
+          linesSkipped.dimensionLines++;
+          return;
+        }
+        
+        // Skip T-Stück-Linien (sie haben eine teeId)
+        if ((line as any).teeId || (line as any).teePart) {
+          linesSkipped.teeLines++;
+          return;
+        }
         
         // Skip grüne Auswahllinien
         if (line.stroke === '#00ff00') {
+          linesSkipped.greenLines++;
           return;
         }
         
         // Skip sehr transparente Linien
         if (line.opacity !== undefined && line.opacity < 0.5) {
+          linesSkipped.transparentLines++;
           return;
+        }
+        
+        // Berechne die absoluten Koordinaten der Linie
+        let absX1: number, absY1: number, absX2: number, absY2: number;
+        
+        if ((line as any).customType === 'CustomLine') {
+          // CustomLine hat relative Koordinaten
+          const centerX = line.left || 0;
+          const centerY = line.top || 0;
+          const relCoords = line.calcLinePoints ? line.calcLinePoints() : {
+            x1: line.x1 || 0,
+            y1: line.y1 || 0,
+            x2: line.x2 || 0,
+            y2: line.y2 || 0
+          };
+          absX1 = centerX + relCoords.x1;
+          absY1 = centerY + relCoords.y1;
+          absX2 = centerX + relCoords.x2;
+          absY2 = centerY + relCoords.y2;
+        } else {
+          // Standard Line hat absolute Koordinaten
+          absX1 = line.x1 || 0;
+          absY1 = line.y1 || 0;
+          absX2 = line.x2 || 0;
+          absY2 = line.y2 || 0;
         }
         
         // Berechne die Position auf der Linie, die dem Komponenten-Mittelpunkt am nächsten ist
         const lineVector = {
-          x: line.x2! - line.x1!,
-          y: line.y2! - line.y1!
+          x: absX2 - absX1,
+          y: absY2 - absY1
         };
         const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
         
         if (lineLength > 0) {
           // Vektor vom Linienanfang zur Komponente
           const toComponent = {
-            x: componentX - line.x1!,
-            y: componentY - line.y1!
+            x: componentX - absX1,
+            y: componentY - absY1
           };
           
-          // Projiziere auf die Linie
-          const t = Math.max(0, Math.min(1, 
-            (toComponent.x * lineVector.x + toComponent.y * lineVector.y) / (lineLength * lineLength)
-          ));
+          // Projiziere auf die Linie (ohne Clamping für Distanzberechnung)
+          const tUnclamped = (toComponent.x * lineVector.x + toComponent.y * lineVector.y) / (lineLength * lineLength);
+          
+          // Clamp für die finale Position
+          const t = Math.max(0, Math.min(1, tUnclamped));
           
           // Berechne den nächsten Punkt auf der Linie
-          const nearestX = line.x1! + t * lineVector.x;
-          const nearestY = line.y1! + t * lineVector.y;
+          const nearestX = absX1 + t * lineVector.x;
+          const nearestY = absY1 + t * lineVector.y;
           
           // Distanz zur Komponente
           const distance = Math.sqrt(
@@ -1655,8 +1962,8 @@ export class LineDrawingService {
             Math.pow(componentY - nearestY, 2)
           );
           
-          // Komponente sollte sehr nah an der Linie sein (max 5 Pixel Abstand)
-          if (distance < closestDistance && distance < 5) {
+          // Track the closest line even if it's far away for debugging
+          if (distance < closestDistance) {
             closestDistance = distance;
             closestLine = line;
             closestT = t;
@@ -1665,137 +1972,365 @@ export class LineDrawingService {
       }
     });
     
-    if (closestLine) {
+    linesSkipped.total = linesSkipped.teeLines + linesSkipped.greenLines + 
+                         linesSkipped.transparentLines + linesSkipped.dimensionLines;
+    
+    console.log(`📈 Lines analyzed: ${linesChecked} checked, ${linesSkipped.total} skipped`, {
+      skipped: linesSkipped,
+      closestDistance: closestDistance ? closestDistance.toFixed(1) : 'none',
+      foundLine: closestLine ? 'yes' : 'no'
+    });
+    
+    // Only use the line if it's within 50 pixels (generous threshold for T-pieces)
+    if (closestLine && closestDistance < 50) {
+      console.log(`✅ Found host line at distance ${closestDistance.toFixed(1)}px, t=${closestT.toFixed(3)}`);
       (component as any).hostLine = closestLine;
+      const lineInfo = closestLine as fabric.Line;
+      
+      // If T-piece is beyond line end, physically move it AND clamp the t value
+      const actualT = closestT;
+      let needsRepositioning = false;
+      let newX = componentX;
+      let newY = componentY;
+      
+      if (closestT >= 0.999) {
+        console.log(`⚠️ T-piece is at/beyond line end (t=${actualT.toFixed(3)}), repositioning to t=0.95`);
+        closestT = 0.95; // Give some room to move
+        needsRepositioning = true;
+      } else if (closestT <= 0.001) {
+        console.log(`⚠️ T-piece is at/beyond line start (t=${actualT.toFixed(3)}), repositioning to t=0.05`);
+        closestT = 0.05; // Give some room to move
+        needsRepositioning = true;
+      }
+      
+      // Calculate the correct position if we need to reposition
+      if (needsRepositioning) {
+        // Berechne die absoluten Koordinaten für die neue Position
+        let absLineX1: number, absLineY1: number, absLineX2: number, absLineY2: number;
+        
+        if ((lineInfo as any).customType === 'CustomLine') {
+          const centerX = lineInfo.left || 0;
+          const centerY = lineInfo.top || 0;
+          const relCoords = lineInfo.calcLinePoints ? lineInfo.calcLinePoints() : {
+            x1: lineInfo.x1 || 0,
+            y1: lineInfo.y1 || 0,
+            x2: lineInfo.x2 || 0,
+            y2: lineInfo.y2 || 0
+          };
+          absLineX1 = centerX + relCoords.x1;
+          absLineY1 = centerY + relCoords.y1;
+          absLineX2 = centerX + relCoords.x2;
+          absLineY2 = centerY + relCoords.y2;
+        } else {
+          absLineX1 = lineInfo.x1 || 0;
+          absLineY1 = lineInfo.y1 || 0;
+          absLineX2 = lineInfo.x2 || 0;
+          absLineY2 = lineInfo.y2 || 0;
+        }
+        
+        const lineVector = {
+          x: absLineX2 - absLineX1,
+          y: absLineY2 - absLineY1
+        };
+        newX = absLineX1 + closestT * lineVector.x;
+        newY = absLineY1 + closestT * lineVector.y;
+        
+        // Move the T-piece to the correct position
+        const deltaX = newX - componentX;
+        const deltaY = newY - componentY;
+        
+        // Clear any cached movement data since we're repositioning
+        delete (component as any).initialMouseT;
+        delete (component as any).tOffset;
+        
+        // Move the selection rectangle
+        component.set({
+          left: newX,
+          top: newY
+        });
+        component.setCoords();
+        
+        // Move the T-piece lines if they exist
+        const teeLines = (component as any).teeLines;
+        if (teeLines && Array.isArray(teeLines)) {
+          teeLines.forEach((line: any) => {
+            if (line && line.type === 'line') {
+              line.set({
+                x1: (line.x1 || 0) + deltaX,
+                y1: (line.y1 || 0) + deltaY,
+                x2: (line.x2 || 0) + deltaX,
+                y2: (line.y2 || 0) + deltaY
+              });
+              line.setCoords();
+            }
+          });
+        }
+        
+        // Move the anchors
+        const anchors = (component as any).anchors;
+        if (anchors && Array.isArray(anchors)) {
+          anchors.forEach((anchor: any) => {
+            if (anchor) {
+              anchor.set({
+                left: (anchor.left || 0) + deltaX,
+                top: (anchor.top || 0) + deltaY
+              });
+              anchor.setCoords();
+            }
+          });
+        }
+        
+        console.log(`Moved T-piece from (${componentX.toFixed(0)}, ${componentY.toFixed(0)}) to (${newX.toFixed(0)}, ${newY.toFixed(0)})`);
+        
+        // Request canvas update
+        if (canvas) {
+          canvas.requestRenderAll();
+        }
+      }
+      
       (component as any).linePosition = closestT;
-      console.log(`Found host line for component, position: ${closestT}, distance: ${closestDistance}`);
+      console.log(`✅ Found host line for T-piece at t=${closestT.toFixed(3)}, distance=${closestDistance.toFixed(1)}px`);
+      // Verwende die berechneten absoluten Koordinaten für das Logging
+      if ((lineInfo as any).customType === 'CustomLine') {
+        const centerX = lineInfo.left || 0;
+        const centerY = lineInfo.top || 0;
+        const relCoords = lineInfo.calcLinePoints ? lineInfo.calcLinePoints() : {
+          x1: lineInfo.x1 || 0,
+          y1: lineInfo.y1 || 0,
+          x2: lineInfo.x2 || 0,
+          y2: lineInfo.y2 || 0
+        };
+        const absX1 = centerX + relCoords.x1;
+        const absY1 = centerY + relCoords.y1;
+        const absX2 = centerX + relCoords.x2;
+        const absY2 = centerY + relCoords.y2;
+        console.log(`Host line (CustomLine): (${absX1.toFixed(0)}, ${absY1.toFixed(0)}) to (${absX2.toFixed(0)}, ${absY2.toFixed(0)})`);
+      } else {
+        console.log(`Host line: (${lineInfo.x1?.toFixed(0)}, ${lineInfo.y1?.toFixed(0)}) to (${lineInfo.x2?.toFixed(0)}, ${lineInfo.y2?.toFixed(0)})`);
+      }
+      console.log(`T-piece center: (${newX.toFixed(0)}, ${newY.toFixed(0)})`);
     } else {
-      console.log('No suitable host line found for component');
+      console.log('⚠️ No suitable host line found for T-piece!');
+      console.log(`T-piece position: (${componentX.toFixed(0)}, ${componentY.toFixed(0)})`);
+      console.log(`Lines checked: ${linesChecked}, skipped: ${linesSkipped.total}`);
+      console.log(`Skipped: ${linesSkipped.teeLines} T-lines, ${linesSkipped.greenLines} green, ${linesSkipped.transparentLines} transparent, ${linesSkipped.dimensionLines} dimension`);
+      if (closestLine) {
+        const lineInfo = closestLine as fabric.Line;
+        console.log(`Closest line was ${closestDistance.toFixed(1)}px away (too far, max 50px)`);
+        console.log(`Closest line: (${lineInfo.x1?.toFixed(0)}, ${lineInfo.y1?.toFixed(0)}) to (${lineInfo.x2?.toFixed(0)}, ${lineInfo.y2?.toFixed(0)})`);
+      } else {
+        console.log('No valid lines found at all!');
+      }
     }
   }
   
-  private updateMovingComponent(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
-    if (!this.movingComponent || !this.moveStartPoint) return;
+  /**
+   * Neue, vereinfachte Funktion für T-Stück und Ventil Bewegung
+   * Bewegt Komponenten entlang ihrer Host-Linie
+   */
+  private moveComponentAlongLine(canvas: fabric.Canvas, component: any, mouseX: number, mouseY: number): void {
+    console.log('🎯 moveComponentAlongLine called with:', {
+      mouseX, 
+      mouseY,
+      componentType: component.type,
+      customType: component.customType,
+      currentPos: { left: component.left, top: component.top }
+    });
     
-    const hostLine = (this.movingComponent as any).hostLine;
+    // Finde die Host-Linie
+    let hostLine = component.hostLine;
     
-    if (!hostLine || hostLine.type !== 'line') {
-      // Wenn keine Host-Linie vorhanden, versuche sie zu finden
-      this.findHostLineForComponent(canvas, this.movingComponent);
-      return;
+    // Wenn keine Host-Linie gespeichert ist, finde sie
+    if (!hostLine) {
+      console.log('🔍 Searching for host line...');
+      this.findHostLineForComponent(canvas, component);
+      hostLine = component.hostLine;
+      if (!hostLine) {
+        console.log('❌ Keine Host-Linie gefunden! Fallback zu einfacher Bewegung');
+        // Fallback: Einfache Bewegung ohne Linie
+        const dx = mouseX - (this.moveStartPoint?.x || mouseX);
+        const dy = mouseY - (this.moveStartPoint?.y || mouseY);
+        component.set({
+          left: (component.left || 0) + dx,
+          top: (component.top || 0) + dy
+        });
+        component.setCoords();
+        if (this.moveStartPoint) {
+          this.moveStartPoint = { x: mouseX, y: mouseY };
+        }
+        canvas.requestRenderAll();
+        return;
+      }
     }
     
-    const line = hostLine as fabric.Line;
+    console.log('✅ Host line found:', {
+      type: hostLine.type,
+      customType: (hostLine as any).customType,
+      x1: hostLine.x1,
+      y1: hostLine.y1,
+      x2: hostLine.x2,
+      y2: hostLine.y2,
+      left: hostLine.left,
+      top: hostLine.top
+    });
     
-    // Berechne die neue Position auf der Linie basierend auf der Mausposition
+    // Berechne absolute Koordinaten der Linie
+    let lineStart: { x: number, y: number };
+    let lineEnd: { x: number, y: number };
+    
+    if ((hostLine as any).customType === 'CustomLine') {
+      // CustomLine hat relative Koordinaten
+      const centerX = hostLine.left || 0;
+      const centerY = hostLine.top || 0;
+      const coords = hostLine.calcLinePoints ? hostLine.calcLinePoints() : {
+        x1: hostLine.x1 || 0,
+        y1: hostLine.y1 || 0,
+        x2: hostLine.x2 || 0,
+        y2: hostLine.y2 || 0
+      };
+      
+      lineStart = { x: centerX + coords.x1, y: centerY + coords.y1 };
+      lineEnd = { x: centerX + coords.x2, y: centerY + coords.y2 };
+      
+      console.log('📍 CustomLine erkannt - Absolute Koordinaten:', lineStart, lineEnd);
+    } else {
+      // Standard Line
+      lineStart = { x: hostLine.x1 || 0, y: hostLine.y1 || 0 };
+      lineEnd = { x: hostLine.x2 || 0, y: hostLine.y2 || 0 };
+    }
+    
+    // Berechne Linien-Vektor
     const lineVector = {
-      x: line.x2! - line.x1!,
-      y: line.y2! - line.y1!
+      x: lineEnd.x - lineStart.x,
+      y: lineEnd.y - lineStart.y
     };
     const lineLength = Math.sqrt(lineVector.x * lineVector.x + lineVector.y * lineVector.y);
     
-    if (lineLength === 0) return;
+    if (lineLength === 0) {
+      console.log('❌ Linie hat Länge 0');
+      return;
+    }
     
-    // Vektor vom Linienanfang zur Mausposition
-    const toMouse = {
-      x: pointer.x - line.x1!,
-      y: pointer.y - line.y1!
+    // Projiziere Mausposition auf die Linie
+    const mouseVector = {
+      x: mouseX - lineStart.x,
+      y: mouseY - lineStart.y
     };
     
-    // Projiziere auf die Linie (begrenzt auf 0-1)
-    const t = Math.max(0, Math.min(1, 
-      (toMouse.x * lineVector.x + toMouse.y * lineVector.y) / (lineLength * lineLength)
-    ));
+    // Berechne t (Position auf der Linie von 0 bis 1)
+    let t = (mouseVector.x * lineVector.x + mouseVector.y * lineVector.y) / (lineLength * lineLength);
     
-    // Berechne die neue Position auf der Linie
-    const newX = line.x1! + t * lineVector.x;
-    const newY = line.y1! + t * lineVector.y;
+    // Begrenze t auf [0, 1]
+    t = Math.max(0, Math.min(1, t));
     
-    // Setze die neue Position
-    this.movingComponent.set({
+    // Berechne neue Position
+    const newX = lineStart.x + t * lineVector.x;
+    const newY = lineStart.y + t * lineVector.y;
+    
+    console.log(`🎯 Bewege Komponente zu: (${newX.toFixed(1)}, ${newY.toFixed(1)}) bei t=${t.toFixed(3)}`);
+    
+    // Berechne Delta für alle zugehörigen Teile
+    const oldX = component.left || 0;
+    const oldY = component.top || 0;
+    const deltaX = newX - oldX;
+    const deltaY = newY - oldY;
+    
+    // Bewege die Hauptkomponente
+    component.set({
       left: newX,
       top: newY
     });
-    this.movingComponent.setCoords();
+    component.setCoords();
     
-    // Speichere die neue Position auf der Linie
-    (this.movingComponent as any).linePosition = t;
-    
-    // Bewege auch die Ankerpunkte der Komponente
-    const anchors = (this.movingComponent as any).anchors;
-    const customType = (this.movingComponent as any).customType;
-    
-    if (anchors && Array.isArray(anchors)) {
-      // Berechne den Winkel der Linie
-      const angle = Math.atan2(lineVector.y, lineVector.x) * 180 / Math.PI;
-      
-      anchors.forEach((anchor: fabric.Circle, index: number) => {
-        if (anchor && anchor.left !== undefined && anchor.top !== undefined) {
-          const distance = 15; // Standard-Abstand der Ankerpunkte
-          
-          if (customType === 'teeJoint') {
-            // T-Stück Ankerpunkte senkrecht zur Linie
-            const perpAngle = (angle + 90) * Math.PI / 180;
-            const offsetX = Math.cos(perpAngle) * distance * (index === 0 ? 1 : -1);
-            const offsetY = Math.sin(perpAngle) * distance * (index === 0 ? 1 : -1);
-            
-            anchor.set({
-              left: newX + offsetX,
-              top: newY + offsetY
+    // Bewege T-Stück-Linien wenn vorhanden
+    if (component.teeLines && Array.isArray(component.teeLines)) {
+      component.teeLines.forEach((line: any) => {
+        if (line && line.type === 'line') {
+          // Für T-Stück Linien: Verschiebe sie mit dem Delta
+          if ((line as any).customType === 'CustomLine') {
+            // CustomLine: Verschiebe das Zentrum
+            line.set({
+              left: (line.left || 0) + deltaX,
+              top: (line.top || 0) + deltaY
             });
           } else {
-            // Ventil-Ankerpunkte entlang der Linie
-            const lineAngle = angle * Math.PI / 180;
-            const offsetX = Math.cos(lineAngle) * distance * (index === 0 ? -1 : 1);
-            const offsetY = Math.sin(lineAngle) * distance * (index === 0 ? -1 : 1);
-            
-            anchor.set({
-              left: newX + offsetX,
-              top: newY + offsetY
+            // Standard Line: Verschiebe die Endpunkte
+            line.set({
+              x1: (line.x1 || 0) + deltaX,
+              y1: (line.y1 || 0) + deltaY,
+              x2: (line.x2 || 0) + deltaX,
+              y2: (line.y2 || 0) + deltaY
             });
           }
+          line.setCoords();
+        }
+      });
+    }
+    
+    // Bewege Ankerpunkte wenn vorhanden
+    if (component.anchors && Array.isArray(component.anchors)) {
+      component.anchors.forEach((anchor: any) => {
+        if (anchor) {
+          anchor.set({
+            left: (anchor.left || 0) + deltaX,
+            top: (anchor.top || 0) + deltaY
+          });
           anchor.setCoords();
         }
       });
     }
     
-    // Für T-Stücke: Suche auch nach Ankerpunkten über componentId
-    const componentId = (this.movingComponent as any).id || (this.movingComponent as any).customId;
-    if (componentId) {
-      canvas.getObjects().forEach(obj => {
-        if (obj.type === 'circle' && (obj as any).isAnchor && 
-            (obj as any).componentId === componentId) {
-          const circle = obj as fabric.Circle;
-          const anchorIndex = (circle as any).anchorIndex || 0;
-          const distance = 15;
-          
-          if (customType === 'teeJoint') {
-            // T-Stück Ankerpunkte senkrecht zur Linie
-            const angle = Math.atan2(lineVector.y, lineVector.x);
-            const perpAngle = angle + Math.PI / 2;
-            const offsetX = Math.cos(perpAngle) * distance * (anchorIndex === 0 ? 1 : -1);
-            const offsetY = Math.sin(perpAngle) * distance * (anchorIndex === 0 ? 1 : -1);
-            
-            circle.set({
-              left: newX + offsetX,
-              top: newY + offsetY
-            });
-          } else {
-            // Ventil-Ankerpunkte entlang der Linie
-            const angle = Math.atan2(lineVector.y, lineVector.x);
-            const offsetX = Math.cos(angle) * distance * (anchorIndex === 0 ? -1 : 1);
-            const offsetY = Math.sin(angle) * distance * (anchorIndex === 0 ? -1 : 1);
-            
-            circle.set({
-              left: newX + offsetX,
-              top: newY + offsetY
-            });
-          }
-          circle.setCoords();
-        }
-      });
+    // Speichere Position auf der Linie
+    component.linePosition = t;
+    
+    // Canvas neu rendern
+    canvas.requestRenderAll();
+  }
+
+  private updateMovingComponent(canvas: fabric.Canvas, pointer: { x: number; y: number }): void {
+    if (!this.movingComponent || !this.moveStartPoint) return;
+    
+    // Debug: Log component details
+    console.log('🔍 updateMovingComponent called for:', {
+      type: this.movingComponent.type,
+      customType: (this.movingComponent as any).customType,
+      isValve: (this.movingComponent as any).isValve,
+      left: this.movingComponent.left,
+      top: this.movingComponent.top
+    });
+    
+    // Check if this is a T-piece or valve (use new function)
+    const customType = (this.movingComponent as any).customType;
+    
+    // IMMER die neue Funktion für Ventile und T-Stücke verwenden
+    // Ventile können verschiedene Strukturen haben
+    const isValve = customType === 'valve' || 
+                    (this.movingComponent as any).isValve === true ||
+                    (this.movingComponent.type === 'group' && (this.movingComponent as any).valveType) ||
+                    (this.movingComponent.type === 'rect' && (this.movingComponent as any).isValve);
+    
+    const isTeeJoint = customType === 'teeJoint' || 
+                       (this.movingComponent as any).isTeeJoint === true;
+    
+    if (isTeeJoint || isValve) {
+      // Use the new function for T-pieces and valves
+      console.log('✅ Using moveComponentAlongLine for:', customType || 'valve/tee');
+      this.moveComponentAlongLine(canvas, this.movingComponent, pointer.x, pointer.y);
+      return;
     }
     
+    // For pipes and other components, use simple movement
+    console.log('📦 Using simple movement for:', customType || this.movingComponent.type);
+    const dx = pointer.x - this.moveStartPoint.x;
+    const dy = pointer.y - this.moveStartPoint.y;
+    
+    this.movingComponent.set({
+      left: (this.movingComponent.left || 0) + dx,
+      top: (this.movingComponent.top || 0) + dy
+    });
+    this.movingComponent.setCoords();
+    
+    this.moveStartPoint = { x: pointer.x, y: pointer.y };
     canvas.requestRenderAll();
   }
   
@@ -1858,24 +2393,38 @@ export class LineDrawingService {
     
     // Prüfe zuerst ob eine Komponente (T-Stück/Ventil) gehighlighted ist
     if (this.highlightedComponent) {
+      const customType = (this.highlightedComponent as any).customType;
+      console.log(`Starting to move component: ${customType}`);
+      
       this.movingComponent = this.highlightedComponent;
       this.moveStartPoint = { x: pointer.x, y: pointer.y };
       
-      // Finde die Host-Linie für diese Komponente
+      // Finde die Host-Linie für diese Komponente  
       const hostLine = (this.movingComponent as any).hostLine;
       const linePosition = (this.movingComponent as any).linePosition;
       
       if (hostLine && linePosition !== undefined) {
         console.log(`Start moving component on line, position: ${linePosition}`);
+        // Store the initial t position for offset calculation
+        (this.movingComponent as any).initialT = linePosition;
       } else {
         console.log('Component has no host line stored, finding it now...');
         // Finde die nächste Linie für diese Komponente
         this.findHostLineForComponent(canvas, this.movingComponent);
+        // After finding, store the initial t position
+        if ((this.movingComponent as any).linePosition !== undefined) {
+          (this.movingComponent as any).initialT = (this.movingComponent as any).linePosition;
+        }
       }
       
       // Deaktiviere Canvas-Selection während des Ziehens
       canvas.selection = false;
       canvas.discardActiveObject();
+      
+      // Setze den Cursor auf move
+      canvas.defaultCursor = 'move';
+      canvas.hoverCursor = 'move';
+      
       return;
     }
     
@@ -1928,7 +2477,50 @@ export class LineDrawingService {
         this.movingSegmentIndex = -1;
         this.moveStartPoint = { x: pointer.x, y: pointer.y };
         
+        // Speichere die ursprünglichen Koordinaten der Linie
+        const line = this.highlightedSegment as fabric.Line;
+        
+        // Debug: Prüfe verschiedene Koordinaten-Properties
+        console.log('=== MouseDown Debug ===');
+        console.log('Pointer position:', pointer);
+        console.log('Line type:', line.type, 'CustomType:', (line as any).customType);
+        
+        // Speichere die originale Position des Line-Centers (left/top)
+        // Dies ist entscheidend für CustomLine, da wir die Position verschieben, nicht die Koordinaten
+        this.originalLeft = line.left || 0;
+        this.originalTop = line.top || 0;
+        
+        console.log('Storing original center position:', {
+          left: this.originalLeft,
+          top: this.originalTop
+        });
+        
+        // Verwende calcLinePoints für korrekte Koordinaten (für Debug)
+        const linePoints = line.calcLinePoints ? line.calcLinePoints() : {
+          x1: line.x1 || 0,
+          y1: line.y1 || 0,
+          x2: line.x2 || 0,
+          y2: line.y2 || 0
+        };
+        
+        console.log('Line properties:', {
+          x1: line.x1,
+          y1: line.y1,
+          x2: line.x2,
+          y2: line.y2,
+          left: line.left,
+          top: line.top,
+          width: line.width,
+          height: line.height,
+          angle: line.angle,
+          originX: line.originX,
+          originY: line.originY,
+          calcLinePoints: linePoints
+        });
+        
+        // Die originale Position des Line-Centers ist bereits oben gespeichert (originalLeft/originalTop)
         console.log(`Start moving split line (not part of editable pipe)`);
+        console.log(`Line ready for movement - center at (${this.originalLeft}, ${this.originalTop})`);
       }
       
       if (this.movingSegment) {
@@ -1946,19 +2538,39 @@ export class LineDrawingService {
   
   public handleMovePipeMouseUp(canvas: fabric.Canvas, options: any): void {
     if (this.movingComponent && this.stateManagement) {
+      // Clean up movement tracking data
+      delete (this.movingComponent as any).initialMouseT;
+      delete (this.movingComponent as any).tOffset;
+      delete (this.movingComponent as any).initialT;
+      delete (this.movingComponent as any).hostLineSearched;
+      
       // Speichere die Änderung mit State Management
       this.stateManagement.executeOperation('Move Component', () => {
         console.log('Component move completed');
       });
       // Reset Komponenten-Highlight
       if (this.highlightedComponent) {
-        const objects = this.highlightedComponent.getObjects();
-        objects.forEach(obj => {
-          if ((obj as any).originalStroke) {
-            obj.set('stroke', (obj as any).originalStroke);
-            delete (obj as any).originalStroke;
+        // Prüfe ob es ein T-Stück mit neuer Struktur ist
+        if ((this.highlightedComponent as any).customType === 'teeJoint') {
+          const teeLines = (this.highlightedComponent as any).teeLines;
+          if (teeLines && Array.isArray(teeLines)) {
+            teeLines.forEach((line: any) => {
+              if ((line as any).originalStroke) {
+                line.set('stroke', (line as any).originalStroke);
+                delete (line as any).originalStroke;
+              }
+            });
           }
-        });
+        } else if (this.highlightedComponent.type === 'group') {
+          // Normale Ventile als Groups
+          const objects = this.highlightedComponent.getObjects();
+          objects.forEach((obj: any) => {
+            if (obj.originalStroke) {
+              obj.set('stroke', obj.originalStroke);
+              delete obj.originalStroke;
+            }
+          });
+        }
       }
     } else if (this.movingAnchor && this.movingPipe && this.stateManagement) {
       // Speichere die Änderung mit State Management
@@ -1985,10 +2597,16 @@ export class LineDrawingService {
     this.movingSegmentIndex = -1;
     this.movingAnchorIndex = -1;
     this.moveStartPoint = null;
+    // originalLineCoords removed - using originalLeft/originalTop instead
+    this.originalLeft = null; // Reset original left position
+    this.originalTop = null; // Reset original top position
     this.associatedComponents = [];
     
     // Reaktiviere Canvas-Selection
     canvas.selection = true;
+    // Reset cursor
+    canvas.defaultCursor = 'default';
+    canvas.hoverCursor = 'pointer';
     canvas.requestRenderAll();
   }
   
@@ -2158,26 +2776,114 @@ export class LineDrawingService {
     if (this.movingSegment.type === 'line') {
       const line = this.movingSegment as fabric.Line;
       
-      // Verschiebe die Linie direkt
-      line.set({
-        x1: (line.x1 || 0) + dx,
-        y1: (line.y1 || 0) + dy,
-        x2: (line.x2 || 0) + dx,
-        y2: (line.y2 || 0) + dy
-      });
-      line.setCoords();
+      // Debug logging
+      console.log('Moving line - dx:', dx, 'dy:', dy);
+      console.log('Original left/top:', this.originalLeft, this.originalTop);
       
-      // Berechne die neue Mittelpunkt-Position der Linie
-      const newMidX = ((line.x1 || 0) + (line.x2 || 0)) / 2;
-      const newMidY = ((line.y1 || 0) + (line.y2 || 0)) / 2;
+      // Verwende die ursprüngliche Position und addiere das Delta
+      if (this.originalLeft !== null && this.originalTop !== null) {
+        const newLeft = this.originalLeft + dx;
+        const newTop = this.originalTop + dy;
+        
+        console.log(`Moving line from (${this.originalLeft}, ${this.originalTop}) to (${newLeft}, ${newTop})`);
+        
+        // Für CustomLine müssen wir einen speziellen Ansatz verwenden
+        if ((line as any).customType === 'CustomLine') {
+          // CustomLine speichert relative Koordinaten, also müssen wir diese beibehalten
+          // und nur die Center-Position verschieben
+          
+          // Option 1: Versuche direkt die Position zu setzen
+          line.set({
+            left: newLeft,
+            top: newTop
+          });
+          
+          // Wichtig: Bei CustomLine müssen wir sicherstellen, dass die Änderung übernommen wird
+          line.setCoords();
+          line.dirty = true;  // Markiere als geändert
+          
+          // Falls das nicht funktioniert, versuche die Koordinaten komplett neu zu berechnen
+          if (line.left !== newLeft || line.top !== newTop) {
+            console.log('Direct position update failed, trying coordinate recalculation...');
+            
+            // Hole die aktuellen relativen Koordinaten
+            const relCoords = line.calcLinePoints();
+            
+            // Berechne die absoluten Koordinaten basierend auf der NEUEN Position
+            const absX1 = newLeft + (relCoords.x1 || 0);
+            const absY1 = newTop + (relCoords.y1 || 0);
+            const absX2 = newLeft + (relCoords.x2 || 0);
+            const absY2 = newTop + (relCoords.y2 || 0);
+            
+            // Setze die absoluten Koordinaten direkt
+            // Das sollte Fabric.js zwingen, die Position neu zu berechnen
+            line.set({
+              x1: absX1,
+              y1: absY1,
+              x2: absX2,
+              y2: absY2
+            });
+            
+            line.setCoords();
+          }
+        } else {
+          // Standard Line
+          line.set({
+            left: newLeft,
+            top: newTop
+          });
+          line.setCoords();
+        }
+        
+        console.log('Line position after update:', {
+          left: line.left,
+          top: line.top,
+          x1: line.x1,
+          y1: line.y1,
+          x2: line.x2,
+          y2: line.y2
+        });
+      }
+      
+      // Force canvas to re-render
+      if (canvas) {
+        canvas.requestRenderAll();
+      }
+      
+      // ALTERNATIVE 2: Falls das nicht funktioniert, versuche die Linie zu löschen und neu zu erstellen
+      // (Auskommentiert für späteren Test)
+      /*
+      canvas.remove(line);
+      const newLine = new fabric.Line(
+        [newX1, newY1, newX2, newY2],
+        {
+          stroke: line.stroke,
+          strokeWidth: line.strokeWidth,
+          selectable: line.selectable,
+          evented: line.evented,
+          ...line.toObject() // Kopiere alle anderen Properties
+        }
+      );
+      canvas.add(newLine);
+      this.movingSegment = newLine;
+      */
+      
+      console.log('Line coords after update:', {
+        x1: line.x1, y1: line.y1, x2: line.x2, y2: line.y2
+      });
+      console.log('Line left/top after:', line.left, line.top);
+      
+      // Verwende die neue Linien-Center-Position
+      const newLineLeft = line.left || 0;
+      const newLineTop = line.top || 0;
       
       // Bewege alle assoziierten Ventile und T-Stücke basierend auf ihrer relativen Position
       this.associatedComponents.forEach(component => {
         const relativePos = (component as any).relativePosition;
         if (relativePos) {
           // Setze die neue Position basierend auf der relativen Position zum Segment-Mittelpunkt
-          const newLeft = newMidX + relativePos.x;
-          const newTop = newMidY + relativePos.y;
+          const newLeft = newLineLeft + relativePos.x;
+          const newTop = newLineTop + relativePos.y;
           
           component.set({
             left: newLeft,
@@ -2457,6 +3163,1106 @@ export class LineDrawingService {
       }
       
       canvas.requestRenderAll();
+    }
+  }
+
+  // ========================================================================================
+  // NEUE FUNKTIONEN FÜR MOVECOMPONENT MODUS (Verschieben-B)
+  // Komplett neuer Ansatz für T-Stück und Ventil Bewegung
+  // ========================================================================================
+
+  private selectedComponent: any = null;
+  private componentHostLine: fabric.Line | null = null;
+  private componentOriginalPos: { x: number, y: number } | null = null;
+  private componentMouseOffset: { x: number, y: number } | null = null;
+  private hoverEffectsSetup: boolean = false;
+
+  public handleMoveComponentMouseDown(canvas: fabric.Canvas, options: any): void {
+    if (this.drawingMode !== 'moveComponent') return;
+    
+    console.log('🔥🔥 MoveComponent Version 9.0 - Akzeptiere schwarze UND grüne Rohrleitungen! 🔥🔥');
+    
+    // Ensure hover effects are set up (fallback in case setDrawingMode wasn't called properly)
+    this.ensureHoverEffectsSetup(canvas);
+    
+    // Reset any hover highlights FIRST before processing the click
+    if (this.highlightedComponent) {
+      this.resetComponentHighlight(canvas, this.highlightedComponent);
+      this.highlightedComponent = null;
+    }
+    
+    const pointer = canvas.getPointer(options.e);
+    let target = options.target;
+    
+    // If no direct target, try to find objects at pointer position
+    if (!target) {
+      console.log('🔍 No direct target, searching for T-piece at pointer:', pointer);
+      const objects = canvas.getObjects();
+      
+      for (const obj of objects) {
+        if ((obj as any).customType === 'teeJoint') {
+          // Check if pointer is within the T-piece bounding box (more reliable than containsPoint)
+          const bounds = obj.getBoundingRect();
+          const tolerance = 20; // Add some tolerance for easier clicking
+          
+          if (pointer.x >= bounds.left - tolerance && 
+              pointer.x <= bounds.left + bounds.width + tolerance &&
+              pointer.y >= bounds.top - tolerance && 
+              pointer.y <= bounds.top + bounds.height + tolerance) {
+            console.log('🎯 Found T-piece within bounds!', bounds);
+            target = obj;
+            break;
+          }
+        }
+      }
+      
+      // If still no target, try canvas.findTarget with a more direct approach
+      if (!target) {
+        try {
+          target = canvas.findTarget(options.e);
+          console.log('🔍 Canvas.findTarget result:', target, 'customType:', (target as any)?.customType);
+        } catch (e) {
+          console.log('🔍 Canvas.findTarget failed:', e);
+        }
+      }
+    }
+    
+    console.log('🎯 MoveComponent MouseDown:', { 
+      target, 
+      pointer, 
+      customType: (target as any)?.customType,
+      selectable: target?.selectable,
+      evented: target?.evented 
+    });
+    
+    // Prüfe ob wir ein T-Stück oder Ventil angeklickt haben
+    if (target) {
+      const isValve = target.type === 'group' && ((target as any).isValve || (target as any).valveType);
+      const isTeeJoint = (target as any).customType === 'teeJoint';
+      
+      console.log('Component check:', { 
+        isValve, 
+        isTeeJoint, 
+        type: target.type, 
+        customType: (target as any).customType 
+      });
+      
+      if (isValve || isTeeJoint) {
+        console.log('✅ Component selected:', isValve ? 'Valve' : 'T-Joint');
+        this.selectedComponent = target;
+        this.componentOriginalPos = { x: target.left || 0, y: target.top || 0 };
+        
+        // Store mouse offset from component center to prevent jumping
+        // CRITICAL: This prevents the T-piece from jumping when first clicked
+        this.componentMouseOffset = {
+          x: pointer.x - (target.left || 0),
+          y: pointer.y - (target.top || 0)
+        };
+        
+        console.log('📍 Initial setup:', {
+          componentPos: this.componentOriginalPos,
+          mouseOffset: this.componentMouseOffset,
+          pointer,
+          calculatedOffset: `pointer(${pointer.x.toFixed(0)}, ${pointer.y.toFixed(0)}) - component(${(target.left || 0).toFixed(0)}, ${(target.top || 0).toFixed(0)}) = offset(${this.componentMouseOffset.x.toFixed(0)}, ${this.componentMouseOffset.y.toFixed(0)})`
+        });
+        
+        // Finde die Host-Linie (Rohrleitung) für die Bewegung
+        this.findNearestLineForComponent(canvas, target);
+        
+        // Deaktiviere Canvas Selection
+        canvas.selection = false;
+        canvas.discardActiveObject();
+        
+        // Highlight component NACH dem Finden der Host-Linie
+        if (isValve && target.type === 'group') {
+          const groupTarget = target as fabric.Group;
+          groupTarget.getObjects().forEach((obj: any) => {
+            if (obj.type === 'line' || obj.type === 'path') {
+              (obj as any).originalStroke = obj.stroke;
+              obj.set('stroke', '#00ff00');
+            }
+          });
+        } else if (isTeeJoint && (target as any).teeLines) {
+          (target as any).teeLines.forEach((line: any) => {
+            if (line) {
+              (line as any).originalStroke = line.stroke;
+              line.set('stroke', '#ff6600'); // Orange highlight für T-Stück - NICHT grün!
+            }
+          });
+        }
+        
+        canvas.requestRenderAll();
+      }
+    }
+  }
+
+  public handleMoveComponentMouseMove(canvas: fabric.Canvas, options: any): void {
+    if (this.drawingMode !== 'moveComponent') return;
+    
+    const pointer = canvas.getPointer(options.e);
+    
+    // If we're dragging a component along a pipeline
+    if (this.selectedComponent && this.componentHostLine) {
+      // Berechne gewünschte Position mit Mouse Offset
+      const desiredPos = {
+        x: pointer.x - (this.componentMouseOffset?.x || 0),
+        y: pointer.y - (this.componentMouseOffset?.y || 0)
+      };
+      
+      // Projiziere auf die Host-Linie
+      const newPos = this.projectPointOnLine(desiredPos, this.componentHostLine);
+      
+      console.log('🎯 Bewege T-Stück entlang Rohrleitung:', {
+        pointer: { x: pointer.x.toFixed(0), y: pointer.y.toFixed(0) },
+        mouseOffset: this.componentMouseOffset,
+        desiredPos: { x: desiredPos.x.toFixed(0), y: desiredPos.y.toFixed(0) },
+        newPos: { x: newPos.x.toFixed(0), y: newPos.y.toFixed(0) },
+        hostLineStroke: this.componentHostLine.stroke,
+        componentCurrentPos: { x: (this.selectedComponent.left || 0).toFixed(0), y: (this.selectedComponent.top || 0).toFixed(0) }
+      });
+      
+      // CRITICAL DEBUG: Check if newPos is different from current position
+      const currentPos = { x: this.selectedComponent.left || 0, y: this.selectedComponent.top || 0 };
+      const positionChanged = Math.abs(newPos.x - currentPos.x) > 0.1 || Math.abs(newPos.y - currentPos.y) > 0.1;
+      
+      if (!positionChanged) {
+        console.log('🚨 PROBLEM: newPos equals currentPos - T-piece won\'t move!', {
+          currentPos,
+          newPos,
+          difference: { x: (newPos.x - currentPos.x).toFixed(3), y: (newPos.y - currentPos.y).toFixed(3) }
+        });
+      }
+      
+      
+      // Bewege die komplette Komponente inkl. aller Teile
+      this.moveComponentParts(canvas, this.selectedComponent, newPos);
+      
+      canvas.requestRenderAll();
+    } 
+    // If we're just hovering (not dragging)
+    else if (!this.selectedComponent) {
+      // Check if we're hovering over a moveable component
+      let target = canvas.findTarget(options.e);
+      
+      // If no direct target found, manually search for T-pieces (same logic as MouseDown)
+      if (!target) {
+        const pointer = canvas.getPointer(options.e);
+        const objects = canvas.getObjects();
+        
+        for (const obj of objects) {
+          if ((obj as any).customType === 'teeJoint') {
+            // Check if pointer is within the T-piece bounding box
+            const bounds = obj.getBoundingRect();
+            const tolerance = 20; // Add some tolerance for easier hovering
+            
+            if (pointer.x >= bounds.left - tolerance && 
+                pointer.x <= bounds.left + bounds.width + tolerance &&
+                pointer.y >= bounds.top - tolerance && 
+                pointer.y <= bounds.top + bounds.height + tolerance) {
+              target = obj;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (target) {
+        const isTeeJoint = (target as any).customType === 'teeJoint';
+        const isValve = target.type === 'group' && ((target as any).isValve || (target as any).valveType);
+        
+        if (isTeeJoint || isValve) {
+          // Show hover cursor
+          canvas.hoverCursor = 'move';
+          
+          // Highlight on hover (if not already highlighted)
+          if (this.highlightedComponent !== target) {
+            // Reset previous highlight
+            if (this.highlightedComponent) {
+              this.resetComponentHighlight(canvas, this.highlightedComponent);
+            }
+            
+            // Apply new highlight
+            this.highlightedComponent = target;
+            if (isTeeJoint && (target as any).teeLines) {
+              console.log('🎨 HIGHLIGHTING T-piece lines:', (target as any).teeLines.length);
+              (target as any).teeLines.forEach((line: any, index: number) => {
+                if (line) {
+                  const currentStroke = line.stroke;
+                  (line as any).originalStroke = (line as any).originalStroke || currentStroke;
+                  console.log(`  Line ${index}: ${currentStroke} → #4CAF50 (original: ${(line as any).originalStroke})`);
+                  line.set('stroke', '#4CAF50'); // Grüne hover highlight für T-Stück wie andere Rohrleitungen
+                }
+              });
+            } else if (isValve && target.type === 'group') {
+              const groupTarget = target as fabric.Group;
+              groupTarget.getObjects().forEach((obj: any) => {
+                if (obj.type === 'line' || obj.type === 'path') {
+                  (obj as any).originalStroke = (obj as any).originalStroke || obj.stroke;
+                  obj.set('stroke', '#4CAF50');
+                }
+              });
+            }
+            canvas.requestRenderAll();
+          }
+        } else {
+          canvas.hoverCursor = 'default';
+          if (this.highlightedComponent) {
+            this.resetComponentHighlight(canvas, this.highlightedComponent);
+            this.highlightedComponent = null;
+            canvas.requestRenderAll();
+          }
+        }
+      } else {
+        canvas.hoverCursor = 'default';
+        if (this.highlightedComponent) {
+          this.resetComponentHighlight(canvas, this.highlightedComponent);
+          this.highlightedComponent = null;
+          canvas.requestRenderAll();
+        }
+      }
+    }
+  }
+
+  public handleMoveComponentMouseUp(canvas: fabric.Canvas, options: any): void {
+    if (this.drawingMode !== 'moveComponent' || !this.selectedComponent) return;
+    
+    console.log('🏁 MoveComponent MouseUp');
+    
+    // Restore original colors
+    const isValve = this.selectedComponent.type === 'group' || (this.selectedComponent as any).isValve;
+    const isTeeJoint = (this.selectedComponent as any).customType === 'teeJoint';
+    
+    if (isValve && this.selectedComponent.type === 'group') {
+      const groupComponent = this.selectedComponent as fabric.Group;
+      groupComponent.getObjects().forEach((obj: any) => {
+        if ((obj as any).originalStroke) {
+          obj.set('stroke', (obj as any).originalStroke);
+          delete (obj as any).originalStroke;
+        }
+      });
+    } else if (isTeeJoint && (this.selectedComponent as any).teeLines) {
+      (this.selectedComponent as any).teeLines.forEach((line: any) => {
+        if (line && (line as any).originalStroke) {
+          line.set('stroke', (line as any).originalStroke);
+          delete (line as any).originalStroke;
+        }
+      });
+    }
+    
+    // Save state if we have state management
+    if (this.stateManagement) {
+      this.stateManagement.executeOperation('Move Component', () => {
+        console.log('Component movement saved');
+      });
+    }
+    
+    // Reset
+    this.selectedComponent = null;
+    this.componentHostLine = null;
+    this.componentOriginalPos = null;
+    this.componentMouseOffset = null;
+    
+    // Re-enable canvas selection
+    canvas.selection = true;
+    canvas.requestRenderAll();
+  }
+
+  private findNearestLineForComponent(canvas: fabric.Canvas, component: any): void {
+    const compX = component.left || 0;
+    const compY = component.top || 0;
+    let nearestLine: fabric.Line | null = null;
+    let nearestDistance = Infinity;
+
+    console.log('🔍 Finding nearest line for component at:', { compX, compY });
+    console.log('Component details:', {
+      type: component.type,
+      customType: (component as any).customType,
+      teeId: (component as any).teeId,
+      teeLines: (component as any).teeLines?.length || 0,
+      connectedLines: (component as any).connectedLines?.length || 0
+    });
+
+    // Special handling for T-pieces with connected lines
+    if ((component as any).customType === 'teeJoint' && (component as any).connectedLines) {
+      const connectedLines = (component as any).connectedLines;
+      console.log('🔗 T-piece has connectedLines:', connectedLines.length);
+
+      // Use the first connected line as host line (these are the split pipeline segments)
+      if (connectedLines.length > 0) {
+        // Find the longest connected line to use as host
+        let longestLine = connectedLines[0];
+        let maxLength = 0;
+
+        connectedLines.forEach((line: any) => {
+          if (line && (line.type === 'line' || (line as any).customType === 'CustomLine')) {
+            let length = 0;
+            if ((line as any).customType === 'CustomLine') {
+              const coords = (line as any).calcLinePoints ? (line as any).calcLinePoints() : {
+                x1: line.x1 || 0,
+                y1: line.y1 || 0,
+                x2: line.x2 || 0,
+                y2: line.y2 || 0
+              };
+              const dx = coords.x2 - coords.x1;
+              const dy = coords.y2 - coords.y1;
+              length = Math.sqrt(dx * dx + dy * dy);
+            } else {
+              const dx = (line.x2 || 0) - (line.x1 || 0);
+              const dy = (line.y2 || 0) - (line.y1 || 0);
+              length = Math.sqrt(dx * dx + dy * dy);
+            }
+
+            console.log('  Connected line length:', length.toFixed(2));
+
+            if (length > maxLength) {
+              maxLength = length;
+              longestLine = line;
+            }
+          }
+        });
+
+        if (longestLine && maxLength > 0) {
+          this.componentHostLine = longestLine;
+          console.log('✅ Using connected line as host line:', {
+            type: (longestLine as any).customType || longestLine.type,
+            length: maxLength.toFixed(2),
+            stroke: longestLine.stroke
+          });
+          return;
+        }
+      }
+    }
+
+    // Debug: Zeige ALLE Objekte auf dem Canvas
+    const allObjects = canvas.getObjects();
+    console.log(`📊 Canvas hat ${allObjects.length} Objekte insgesamt`);
+
+    const allLines = allObjects.filter(obj =>
+      obj.type === 'line' || (obj as any).customType === 'CustomLine'
+    );
+    console.log(`📏 Davon sind ${allLines.length} Linien:`);
+    allLines.forEach((line, index) => {
+      console.log(`  Linie ${index + 1}:`, {
+        type: (line as any).customType || line.type,
+        stroke: line.stroke,
+        strokeWidth: line.strokeWidth,
+        opacity: line.opacity,
+        teeId: (line as any).teeId,
+        coords: {
+          x1: (line as any).x1,
+          y1: (line as any).y1,
+          x2: (line as any).x2,
+          y2: (line as any).y2,
+          left: line.left,
+          top: line.top
+        }
+      });
+    });
+
+    // Get the T-piece's own lines to exclude them
+    const componentTeeId = (component as any).teeId;
+    const componentTeeLines = (component as any).teeLines || [];
+    
+    canvas.getObjects().forEach(obj => {
+      // Check for both regular lines and CustomLines
+      if ((obj.type === 'line' || (obj as any).customType === 'CustomLine') && obj !== component) {
+        const line = obj as fabric.Line;
+        
+        // Skip the T-piece's own lines (the visual lines of the T-piece itself)
+        if (componentTeeId && (line as any).teeId === componentTeeId) {
+          console.log('  Skipping T-piece own line with matching teeId:', componentTeeId);
+          return;
+        }
+        
+        // Also skip if line is in the component's teeLines array
+        if (componentTeeLines.includes(line)) {
+          console.log('  Skipping line that is in component.teeLines array');
+          return;
+        }
+        
+        // Skip special lines (but not the host pipeline!)
+        if ((line as any).isDimensionPart || 
+            (line.opacity !== undefined && line.opacity < 0.5)) {
+          return;
+        }
+        
+        // Akzeptiere sowohl schwarze als auch grüne Rohrleitungen
+        // Skip nur sehr transparente Linien
+        if (line.opacity !== undefined && line.opacity < 0.1) {
+          console.log('  Skipping very transparent line');
+          return;
+        }
+        
+        // Bevorzuge schwarze Linien, aber akzeptiere auch grüne
+        const isPreferredLine = line.stroke === 'black' || line.stroke === '#000000';
+        const isAcceptableLine = line.stroke === '#4CAF50' || isPreferredLine;
+        
+        if (!isAcceptableLine) {
+          console.log('  Skipping line with unacceptable stroke:', line.stroke);
+          return;
+        }
+        
+        // Get line coordinates
+        let x1: number, y1: number, x2: number, y2: number;
+        
+        if ((line as any).customType === 'CustomLine') {
+          // CustomLine with relative coordinates
+          const centerX = line.left || 0;
+          const centerY = line.top || 0;
+          const coords = (line as any).calcLinePoints ? (line as any).calcLinePoints() : {
+            x1: (line as any).x1 || 0,
+            y1: (line as any).y1 || 0,
+            x2: (line as any).x2 || 0,
+            y2: (line as any).y2 || 0
+          };
+          x1 = centerX + coords.x1;
+          y1 = centerY + coords.y1;
+          x2 = centerX + coords.x2;
+          y2 = centerY + coords.y2;
+        } else {
+          // Standard line
+          x1 = line.x1 || 0;
+          y1 = line.y1 || 0;
+          x2 = line.x2 || 0;
+          y2 = line.y2 || 0;
+        }
+        
+        // Calculate distance to line
+        const dist = this.distanceToLine(
+          { x: compX, y: compY },
+          { x: x1, y: y1 },
+          { x: x2, y: y2 }
+        );
+        
+        // Only log lines that are reasonably close
+        if (dist < 100) {
+          console.log('📏 Line candidate:', {
+            type: (line as any).customType || line.type,
+            stroke: line.stroke,
+            distance: dist.toFixed(2),
+            coords: { x1: x1.toFixed(0), y1: y1.toFixed(0), x2: x2.toFixed(0), y2: y2.toFixed(0) },
+            teeId: (line as any).teeId,
+            isPipe: (line as any).isPipe,
+            originalStroke: (line as any).originalStroke
+          });
+        }
+        
+        // Consider lines within 50 pixels
+        if (dist < nearestDistance && dist < 50) {
+          // Präferiere schwarze Linien, aber akzeptiere auch grüne
+          const isBlackLine = line.stroke === 'black' || line.stroke === '#000000';
+          const isGreenLine = line.stroke === '#4CAF50';
+          
+          // Wenn wir noch keine Linie haben oder diese besser ist
+          if (nearestLine === null || isBlackLine || (isGreenLine && nearestLine.stroke !== 'black')) {
+            nearestDistance = dist;
+            nearestLine = line;
+          }
+        }
+      }
+    });
+    
+    if (nearestLine) {
+      this.componentHostLine = nearestLine;
+      const lineObj = nearestLine as fabric.Line;
+      console.log('✅ Found host line:', {
+        type: (lineObj as any).customType || lineObj.type,
+        distance: nearestDistance.toFixed(2),
+        stroke: lineObj.stroke,
+        isPipe: (lineObj as any).isPipe,
+        coords: (() => {
+          if ((lineObj as any).customType === 'CustomLine') {
+            const centerX = lineObj.left || 0;
+            const centerY = lineObj.top || 0;
+            const coords = (lineObj as any).calcLinePoints ? (lineObj as any).calcLinePoints() : {
+              x1: (lineObj as any).x1 || 0,
+              y1: (lineObj as any).y1 || 0,
+              x2: (lineObj as any).x2 || 0,
+              y2: (lineObj as any).y2 || 0
+            };
+            return {
+              x1: (centerX + coords.x1).toFixed(0),
+              y1: (centerY + coords.y1).toFixed(0),
+              x2: (centerX + coords.x2).toFixed(0),
+              y2: (centerY + coords.y2).toFixed(0)
+            };
+          } else {
+            return {
+              x1: (lineObj.x1 || 0).toFixed(0),
+              y1: (lineObj.y1 || 0).toFixed(0),
+              x2: (lineObj.x2 || 0).toFixed(0),
+              y2: (lineObj.y2 || 0).toFixed(0)
+            };
+          }
+        })()
+      });
+    } else {
+      console.log('❌ No suitable host line found');
+      this.componentHostLine = null;
+    }
+  }
+
+  private findHostLineAnchors(canvas: fabric.Canvas, hostLine: fabric.Line): { start: { x: number, y: number }, end: { x: number, y: number } } | null {
+    if (!canvas || !hostLine) return null;
+
+    // Get absolute line coordinates
+    let x1: number, y1: number, x2: number, y2: number;
+    
+    if ((hostLine as any).customType === 'CustomLine') {
+      // CustomLine with relative coordinates
+      const centerX = hostLine.left || 0;
+      const centerY = hostLine.top || 0;
+      const coords = (hostLine as any).calcLinePoints ? (hostLine as any).calcLinePoints() : {
+        x1: hostLine.x1 || 0,
+        y1: hostLine.y1 || 0,
+        x2: hostLine.x2 || 0,
+        y2: hostLine.y2 || 0
+      };
+      x1 = centerX + coords.x1;
+      y1 = centerY + coords.y1;
+      x2 = centerX + coords.x2;
+      y2 = centerY + coords.y2;
+    } else {
+      // Standard line
+      x1 = hostLine.x1 || 0;
+      y1 = hostLine.y1 || 0;
+      x2 = hostLine.x2 || 0;
+      y2 = hostLine.y2 || 0;
+    }
+
+    // Find anchor points that are at the start and end of this line
+    const tolerance = 30; // Increased tolerance to account for anchor placement variations
+    const allObjects = canvas.getObjects();
+    
+    // Try multiple ways to find anchors
+    const anchors = allObjects.filter(obj => {
+      return (obj as any).isAnchor === true ||
+             (obj as any).customType === 'anchorPoint' ||
+             (obj.type === 'circle' && (obj as fabric.Circle).radius && (obj as fabric.Circle).radius < 10); // Small circles are likely anchors
+    }) as fabric.Circle[];
+    
+    console.log('🔍 Searching for anchors:', {
+      totalObjects: allObjects.length,
+      totalAnchors: anchors.length,
+      lineCoords: { x1: x1.toFixed(0), y1: y1.toFixed(0), x2: x2.toFixed(0), y2: y2.toFixed(0) },
+      tolerance
+    });
+    
+    let startAnchor = null;
+    let endAnchor = null;
+
+    for (let i = 0; i < anchors.length; i++) {
+      const anchor = anchors[i];
+      const anchorX = anchor.left || 0;
+      const anchorY = anchor.top || 0;
+      
+      const distanceToStart = Math.sqrt((anchorX - x1) ** 2 + (anchorY - y1) ** 2);
+      const distanceToEnd = Math.sqrt((anchorX - x2) ** 2 + (anchorY - y2) ** 2);
+      
+      console.log(`  Anchor ${i}:`, {
+        position: { x: anchorX.toFixed(0), y: anchorY.toFixed(0) },
+        distanceToStart: distanceToStart.toFixed(1),
+        distanceToEnd: distanceToEnd.toFixed(1),
+        properties: { isAnchor: (anchor as any).isAnchor, type: anchor.type }
+      });
+      
+      // Check if anchor is at line start
+      if (distanceToStart < tolerance) {
+        startAnchor = { x: anchorX, y: anchorY };
+        console.log(`    ✅ Found START anchor at (${anchorX.toFixed(0)}, ${anchorY.toFixed(0)})`);
+      }
+      // Check if anchor is at line end
+      else if (distanceToEnd < tolerance) {
+        endAnchor = { x: anchorX, y: anchorY };
+        console.log(`    ✅ Found END anchor at (${anchorX.toFixed(0)}, ${anchorY.toFixed(0)})`);
+      }
+    }
+
+    if (startAnchor && endAnchor) {
+      console.log('🔗 Found host line anchors:', {
+        start: { x: startAnchor.x.toFixed(0), y: startAnchor.y.toFixed(0) },
+        end: { x: endAnchor.x.toFixed(0), y: endAnchor.y.toFixed(0) }
+      });
+      return { start: startAnchor, end: endAnchor };
+    }
+
+    console.log('❌ Could not find both anchors for host line');
+    return null;
+  }
+
+  private projectPointOnLine(point: { x: number, y: number }, line: fabric.Line): { x: number, y: number } {
+    console.log('📐 projectPointOnLine called with:', {
+      inputPoint: { x: point.x.toFixed(0), y: point.y.toFixed(0) },
+      lineType: (line as any).customType || 'standard',
+      lineStroke: line.stroke
+    });
+    
+    // Find anchor constraints for T-piece movement
+    const anchors = this.canvas ? this.findHostLineAnchors(this.canvas, line) : null;
+    
+    // Get absolute line coordinates
+    let x1: number, y1: number, x2: number, y2: number;
+    
+    if ((line as any).customType === 'CustomLine') {
+      // CustomLine with relative coordinates
+      const centerX = line.left || 0;
+      const centerY = line.top || 0;
+      const coords = (line as any).calcLinePoints ? (line as any).calcLinePoints() : {
+        x1: line.x1 || 0,
+        y1: line.y1 || 0,
+        x2: line.x2 || 0,
+        y2: line.y2 || 0
+      };
+      x1 = centerX + coords.x1;
+      y1 = centerY + coords.y1;
+      x2 = centerX + coords.x2;
+      y2 = centerY + coords.y2;
+      
+      console.log('📐 CustomLine coordinates:', {
+        center: { x: centerX.toFixed(0), y: centerY.toFixed(0) },
+        relativeCoords: coords,
+        absoluteCoords: { x1: x1.toFixed(0), y1: y1.toFixed(0), x2: x2.toFixed(0), y2: y2.toFixed(0) }
+      });
+    } else {
+      // Standard line
+      x1 = line.x1 || 0;
+      y1 = line.y1 || 0;
+      x2 = line.x2 || 0;
+      y2 = line.y2 || 0;
+      
+      console.log('📐 Standard line coordinates:', { x1: x1.toFixed(0), y1: y1.toFixed(0), x2: x2.toFixed(0), y2: y2.toFixed(0) });
+    }
+    
+    // Calculate projection
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSq = dx * dx + dy * dy;
+    
+    console.log('📐 Projection calculation:', {
+      lineVector: { dx: dx.toFixed(1), dy: dy.toFixed(1) },
+      lineLength: Math.sqrt(lengthSq).toFixed(1),
+      lengthSq: lengthSq.toFixed(1)
+    });
+    
+    if (lengthSq === 0) {
+      console.log('⚠️ Zero-length line detected, returning first point');
+      return { x: x1, y: y1 };
+    }
+    
+    // Calculate the raw t value (can be outside 0-1 range)
+    let rawT = ((point.x - x1) * dx + (point.y - y1) * dy) / lengthSq;
+    
+    // Check if we have anchor constraints - if so, skip line extension
+    let skipExtension = false;
+    if (anchors && Array.isArray(anchors) && anchors.length >= 2) {
+      console.log('🔒 Anchor constraints detected - will skip line extension and apply constraints instead');
+      skipExtension = true;
+    }
+    
+    // CRITICAL: Extend host line dynamically if T-piece moves beyond bounds (only if no anchor constraints)
+    let extendedLine = false;
+    if (!skipExtension && rawT > 1.0) {
+      // T-piece wants to move beyond line end - extend the line
+      console.log('🚀 EXTENDING host line beyond end! rawT =', rawT.toFixed(3));
+      const extension = (rawT - 1.0) * Math.sqrt(lengthSq);
+      const newX2 = x2 + (extension * dx) / Math.sqrt(lengthSq);
+      const newY2 = y2 + (extension * dy) / Math.sqrt(lengthSq);
+      
+      // Update the actual host line coordinates
+      if ((line as any).customType === 'CustomLine') {
+        // For CustomLine, we need to update the coordinates properly
+        console.log('🚀 Extending CustomLine - updating coordinates directly');
+        line.set({
+          x2: newX2,
+          y2: newY2
+        });
+        // Force the CustomLine to recalculate its internal coordinates
+        line.setCoords();
+        (line as any).dirty = true;
+        extendedLine = true;
+        console.log('🚀 Extended CustomLine from', `(${x1}, ${y1}) → (${x2}, ${y2})`, 
+                   'to', `(${x1}, ${y1}) → (${newX2.toFixed(0)}, ${newY2.toFixed(0)})`);
+        
+        // Update our calculation coordinates
+        x2 = newX2;
+        y2 = newY2;
+      } else {
+        // Standard line - update x2, y2
+        line.set({
+          x2: newX2,
+          y2: newY2
+        });
+        extendedLine = true;
+        console.log('🚀 Extended host line from', `(${x1}, ${y1}) → (${x2}, ${y2})`, 
+                   'to', `(${x1}, ${y1}) → (${newX2.toFixed(0)}, ${newY2.toFixed(0)})`);
+        
+        // Update our calculation coordinates
+        x2 = newX2;
+        y2 = newY2;
+        // Recalculate with new line length
+        const newDx = x2 - x1;
+        const newDy = y2 - y1;
+        const newLengthSq = newDx * newDx + newDy * newDy;
+        const newRawT = ((point.x - x1) * newDx + (point.y - y1) * newDy) / newLengthSq;
+        rawT = newRawT;  // Use the new t value
+      }
+    } else if (!skipExtension && rawT < 0.0) {
+      // T-piece wants to move beyond line start - extend the line backwards  
+      console.log('🚀 EXTENDING host line beyond start! rawT =', rawT.toFixed(3));
+      const extension = Math.abs(rawT) * Math.sqrt(lengthSq);
+      const newX1 = x1 - (extension * dx) / Math.sqrt(lengthSq);
+      const newY1 = y1 - (extension * dy) / Math.sqrt(lengthSq);
+      
+      if ((line as any).customType === 'CustomLine') {
+        // Handle CustomLine extension at the start
+        console.log('🚀 Extending CustomLine backwards - updating coordinates directly');
+        line.set({
+          x1: newX1,
+          y1: newY1
+        });
+        // Force the CustomLine to recalculate its internal coordinates
+        line.setCoords();
+        (line as any).dirty = true;
+        extendedLine = true;
+        console.log('🚀 Extended CustomLine from', `(${x1}, ${y1}) → (${x2}, ${y2})`, 
+                   'to', `(${newX1.toFixed(0)}, ${newY1.toFixed(0)}) → (${x2}, ${y2})`);
+        
+        // Update our calculation coordinates
+        x1 = newX1;
+        y1 = newY1;
+      } else {
+        line.set({
+          x1: newX1,
+          y1: newY1
+        });
+        extendedLine = true;
+        console.log('🚀 Extended host line from', `(${x1}, ${y1}) → (${x2}, ${y2})`, 
+                   'to', `(${newX1.toFixed(0)}, ${newY1.toFixed(0)}) → (${x2}, ${y2})`);
+        
+        // Update our calculation coordinates
+        x1 = newX1;
+        y1 = newY1;
+        // Recalculate with new line length
+        const newDx = x2 - x1;
+        const newDy = y2 - y1;
+        const newLengthSq = newDx * newDx + newDy * newDy;
+        const newRawT = ((point.x - x1) * newDx + (point.y - y1) * newDy) / newLengthSq;
+        rawT = newRawT;  // Use the new t value
+      }
+    }
+
+    // Apply anchor constraints for T-piece movement
+    let constrainedT = rawT;
+    if (anchors) {
+      // Calculate T-values for anchor positions
+      const startT = 0.0;  // Start anchor is always at t=0
+      const endT = 1.0;    // End anchor is always at t=1
+      
+      // Add small tolerance (5% of line) to prevent T-piece from reaching exactly the anchor
+      const tolerance = 0.05;
+      const minT = startT + tolerance;
+      const maxT = endT - tolerance;
+      
+      // Constrain T-value between anchors with tolerance
+      constrainedT = Math.max(minT, Math.min(maxT, rawT));
+      
+      console.log('🔒 Applied anchor constraints:', {
+        originalT: rawT.toFixed(3),
+        constrainedT: constrainedT.toFixed(3),
+        minT: minT.toFixed(3),
+        maxT: maxT.toFixed(3),
+        wasConstrained: Math.abs(constrainedT - rawT) > 0.001
+      });
+    }
+
+    // Use constrained t value
+    const t = extendedLine ? constrainedT : Math.max(-0.05, Math.min(1.05, constrainedT));
+    
+    console.log('📐 T-value calculation:', {
+      rawT: rawT.toFixed(3),
+      constrainedT: constrainedT.toFixed(3),
+      finalT: t.toFixed(3),
+      beyondEnd: rawT > 1.0 ? 'YES - beyond end' : rawT < 0.0 ? 'YES - before start' : 'NO - within line',
+      lineExtended: extendedLine
+    });
+    
+    const result = {
+      x: x1 + t * dx,
+      y: y1 + t * dy
+    };
+    
+    console.log('📐 Projection result:', {
+      t: t.toFixed(3),
+      projectedPoint: { x: result.x.toFixed(0), y: result.y.toFixed(0) },
+      inputVsResult: `(${point.x.toFixed(0)}, ${point.y.toFixed(0)}) → (${result.x.toFixed(0)}, ${result.y.toFixed(0)})`,
+      hostLineExtended: extendedLine
+    });
+    
+    // Force canvas re-render if we extended the line
+    if (extendedLine && this.canvas) {
+      this.canvas.requestRenderAll();
+    }
+    
+    return result;
+  }
+
+  private distanceToLine(point: { x: number, y: number }, lineStart: { x: number, y: number }, lineEnd: { x: number, y: number }): number {
+    const A = point.x - lineStart.x;
+    const B = point.y - lineStart.y;
+    const C = lineEnd.x - lineStart.x;
+    const D = lineEnd.y - lineStart.y;
+    
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    
+    let param = -1;
+    if (lenSq !== 0) {
+      param = dot / lenSq;
+    }
+    
+    let xx, yy;
+    
+    if (param < 0) {
+      xx = lineStart.x;
+      yy = lineStart.y;
+    } else if (param > 1) {
+      xx = lineEnd.x;
+      yy = lineEnd.y;
+    } else {
+      xx = lineStart.x + param * C;
+      yy = lineStart.y + param * D;
+    }
+    
+    const dx = point.x - xx;
+    const dy = point.y - yy;
+    
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  private moveComponentParts(canvas: fabric.Canvas, component: any, newPos: { x: number, y: number }): void {
+    const oldX = component.left || 0;
+    const oldY = component.top || 0;
+    const deltaX = newPos.x - oldX;
+    const deltaY = newPos.y - oldY;
+    
+    console.log('🔧 moveComponentParts FINAL FIX:', {
+      oldPos: { x: oldX.toFixed(0), y: oldY.toFixed(0) },
+      newPos: { x: newPos.x.toFixed(0), y: newPos.y.toFixed(0) },
+      delta: { x: deltaX.toFixed(0), y: deltaY.toFixed(0) }
+    });
+    
+    // Move the main component FIRST
+    component.set({
+      left: newPos.x,
+      top: newPos.y
+    });
+    component.setCoords();
+    
+    // For T-Joints, move the associated lines
+    if ((component as any).teeLines) {
+      (component as any).teeLines.forEach((line: any, index: number) => {
+        if (line) {
+          console.log(`🔧 Moving T-piece line ${index}:`, {
+            type: line.type,
+            customType: (line as any).customType,
+            oldX1: line.x1?.toFixed(0),
+            oldY1: line.y1?.toFixed(0),
+            oldX2: line.x2?.toFixed(0),
+            oldY2: line.y2?.toFixed(0)
+          });
+          
+          // Move endpoints directly - works for both CustomLine and regular Line
+          if (line.type === 'line' || (line as any).customType === 'CustomLine') {
+            line.set({
+              x1: (line.x1 || 0) + deltaX,
+              y1: (line.y1 || 0) + deltaY,
+              x2: (line.x2 || 0) + deltaX,
+              y2: (line.y2 || 0) + deltaY
+            });
+            line.setCoords();
+            
+            console.log(`✅ Line ${index} moved to:`, {
+              newX1: line.x1?.toFixed(0),
+              newY1: line.y1?.toFixed(0),
+              newX2: line.x2?.toFixed(0),
+              newY2: line.y2?.toFixed(0)
+            });
+          }
+        }
+      });
+      
+      // Update teeData position
+      const teeData = (component as any).teeData;
+      if (teeData && teeData.position) {
+        teeData.position.x = newPos.x;
+        teeData.position.y = newPos.y;
+        console.log('✅ Updated teeData position:', teeData.position);
+      }
+    }
+    
+    // Update connected pipeline segments if they exist (CRITICAL for T-piece movement)
+    const connectedLines = (component as any).connectedLines;
+    if (connectedLines && Array.isArray(connectedLines) && connectedLines.length >= 2) {
+      console.log('🔗 Updating connected pipeline segments:', connectedLines.length);
+
+      const line1 = connectedLines[0];
+      const line2 = connectedLines[1];
+
+      if (line1 && line2) {
+        // Calculate gap size based on component type (same logic as creation)
+        let gapSize = 40; // Default gap for T-pieces
+        if ((component as any).customType === 'gateValveS') gapSize = 20;
+        if ((component as any).customType === 'gateValveFL') gapSize = 40;
+
+        const halfGap = gapSize / 2;
+
+        // Get the host line direction from the connected lines themselves
+        // Use the vector from line1 start to line2 end
+        let dirX = 0, dirY = 0;
+
+        // Get line1 start point
+        const line1StartX = line1.x1 || 0;
+        const line1StartY = line1.y1 || 0;
+
+        // Get line2 end point
+        const line2EndX = line2.x2 || 0;
+        const line2EndY = line2.y2 || 0;
+
+        // Calculate direction vector
+        dirX = line2EndX - line1StartX;
+        dirY = line2EndY - line1StartY;
+        const length = Math.sqrt(dirX * dirX + dirY * dirY);
+
+        if (length > 0) {
+          // Normalize direction vector
+          const unitX = dirX / length;
+          const unitY = dirY / length;
+
+          // Update line1: from its current start to (newPos - halfGap)
+          const line1EndX = newPos.x - (halfGap * unitX);
+          const line1EndY = newPos.y - (halfGap * unitY);
+
+          line1.set({
+            x2: line1EndX,
+            y2: line1EndY
+          });
+          line1.setCoords();
+          (line1 as any).dirty = true;
+
+          // Update line2: from (newPos + halfGap) to its current end
+          const line2StartX = newPos.x + (halfGap * unitX);
+          const line2StartY = newPos.y + (halfGap * unitY);
+
+          line2.set({
+            x1: line2StartX,
+            y1: line2StartY
+          });
+          line2.setCoords();
+          (line2 as any).dirty = true;
+
+          console.log('✅ Updated connected lines:', {
+            line1: { start: `(${line1StartX.toFixed(1)}, ${line1StartY.toFixed(1)})`, end: `(${line1EndX.toFixed(1)}, ${line1EndY.toFixed(1)})` },
+            line2: { start: `(${line2StartX.toFixed(1)}, ${line2StartY.toFixed(1)})`, end: `(${line2EndX.toFixed(1)}, ${line2EndY.toFixed(1)})` },
+            gapSize,
+            newComponentPos: { x: newPos.x.toFixed(1), y: newPos.y.toFixed(1) },
+            direction: { unitX: unitX.toFixed(3), unitY: unitY.toFixed(3) }
+          });
+        } else {
+          console.log('⚠️ Could not calculate direction for connected lines - zero length');
+        }
+      }
+    }
+    
+    // Move anchors if they exist
+    if ((component as any).anchors) {
+      (component as any).anchors.forEach((anchor: any, index: number) => {
+        if (anchor) {
+          const oldAnchorX = anchor.left || 0;
+          const oldAnchorY = anchor.top || 0;
+          anchor.set({
+            left: oldAnchorX + deltaX,
+            top: oldAnchorY + deltaY
+          });
+          anchor.setCoords();
+          console.log(`✅ Anchor ${index} moved from (${oldAnchorX.toFixed(0)}, ${oldAnchorY.toFixed(0)}) to (${anchor.left.toFixed(0)}, ${anchor.top.toFixed(0)})`);
+        }
+      });
+    }
+    
+    // CRITICAL: Update host pipeline after T-piece movement
+    if (this.componentHostLine && this.canvas) {
+      console.log('🔧 Updating host pipeline coordinates after T-piece movement');
+      const hostLine = this.componentHostLine;
+      
+      // For CustomLine objects, we need to handle the coordinate update differently
+      if ((hostLine as any).customType === 'CustomLine') {
+        // CustomLine needs to have its internal coordinates recalculated
+        console.log('🔧 Host line is CustomLine - triggering coordinate recalculation');
+        
+        // Force the line to recalculate its path by calling setCoords
+        hostLine.setCoords();
+        
+        // Ensure the line renders correctly
+        (hostLine as any).dirty = true;
+        hostLine.set({
+          selectable: true,
+          evented: true,
+          hasControls: false,
+          hasBorders: false // CustomLine handles its own borders
+        });
+      } else {
+        // Standard line - update coordinates normally
+        hostLine.setCoords();
+        hostLine.set({
+          selectable: true,
+          evented: true,
+          hasControls: false,
+          hasBorders: true
+        });
+      }
+      
+      console.log('✅ Host pipeline updated and selectable again:', {
+        x1: hostLine.x1?.toFixed(0),
+        y1: hostLine.y1?.toFixed(0), 
+        x2: hostLine.x2?.toFixed(0),
+        y2: hostLine.y2?.toFixed(0),
+        selectable: hostLine.selectable,
+        evented: hostLine.evented,
+        customType: (hostLine as any).customType || 'standard'
+      });
+      
+      // Force full canvas re-render to ensure everything is properly updated
+      this.canvas.requestRenderAll();
+    }
+    
+    console.log('🎉 Component movement complete!');
+  }
+  
+  private resetComponentHighlight(canvas: fabric.Canvas, component: any): void {
+    if (!component) return;
+    
+    const isTeeJoint = (component as any).customType === 'teeJoint';
+    const isValve = component.type === 'group';
+    
+    if (isTeeJoint && (component as any).teeLines) {
+      console.log('🔄 RESETTING T-piece highlight:', (component as any).teeLines.length, 'lines');
+      (component as any).teeLines.forEach((line: any, index: number) => {
+        if (line && (line as any).originalStroke) {
+          const currentStroke = line.stroke;
+          const originalStroke = (line as any).originalStroke;
+          console.log(`  Line ${index}: ${currentStroke} → ${originalStroke}`);
+          line.set('stroke', originalStroke);
+          delete (line as any).originalStroke;
+        }
+      });
+    } else if (isValve && component.type === 'group') {
+      const groupComponent = component as fabric.Group;
+      groupComponent.getObjects().forEach((obj: any) => {
+        if ((obj.type === 'line' || obj.type === 'path') && (obj as any).originalStroke) {
+          obj.set('stroke', (obj as any).originalStroke);
+          delete (obj as any).originalStroke;
+        }
+      });
     }
   }
 }
