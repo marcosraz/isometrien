@@ -762,7 +762,7 @@ export class PipingService {
           originY: 'center'
         });
         
-        valveAngle = 30;  // Adjusted from 45° by -15° for better visual alignment
+        valveAngle = 0;  // Adjusted from 45° by -45° total for better visual alignment
       } else {
         // Mirrored orientation (Ctrl pressed) - swap the triangles
         triangle1 = new fabric.Polygon([
@@ -789,7 +789,7 @@ export class PipingService {
           originY: 'center'
         });
         
-        valveAngle = 120;  // Adjusted from 135° by -15° for better visual alignment (mirrored version)
+        valveAngle = 90;  // Adjusted from 135° by -45° total for better visual alignment (mirrored version)
       }
     } else if ((normalizedAngle >= 20 && normalizedAngle <= 40) || 
                (normalizedAngle >= 200 && normalizedAngle <= 220)) {
