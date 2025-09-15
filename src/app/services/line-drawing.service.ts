@@ -3298,19 +3298,41 @@ export class LineDrawingService {
 
   public handleMoveComponentMouseMove(canvas: fabric.Canvas, options: any): void {
     if (this.drawingMode !== 'moveComponent') return;
-    
+
     const pointer = canvas.getPointer(options.e);
-    
+
     // If we're dragging a component along a pipeline
     if (this.selectedComponent && this.componentHostLine) {
+      // For T-pieces, use the combined virtual line from both connected segments
+      let effectiveHostLine = this.componentHostLine;
+
+      if ((this.selectedComponent as any).customType === 'teeJoint' &&
+          (this.selectedComponent as any).connectedLines?.length >= 2) {
+        // Create a virtual line that spans both connected segments
+        const line1 = (this.selectedComponent as any).connectedLines[0];
+        const line2 = (this.selectedComponent as any).connectedLines[1];
+
+        if (line1 && line2) {
+          // Virtual line from line1 start to line2 end
+          effectiveHostLine = new fabric.Line(
+            [line1.x1 || 0, line1.y1 || 0, line2.x2 || 0, line2.y2 || 0],
+            { stroke: 'transparent' }
+          );
+          console.log('📏 Using virtual line for T-piece movement:', {
+            start: { x: (line1.x1 || 0).toFixed(0), y: (line1.y1 || 0).toFixed(0) },
+            end: { x: (line2.x2 || 0).toFixed(0), y: (line2.y2 || 0).toFixed(0) }
+          });
+        }
+      }
+
       // Berechne gewünschte Position mit Mouse Offset
       const desiredPos = {
         x: pointer.x - (this.componentMouseOffset?.x || 0),
         y: pointer.y - (this.componentMouseOffset?.y || 0)
       };
-      
+
       // Projiziere auf die Host-Linie
-      const newPos = this.projectPointOnLine(desiredPos, this.componentHostLine);
+      const newPos = this.projectPointOnLine(desiredPos, effectiveHostLine);
       
       console.log('🎯 Bewege T-Stück entlang Rohrleitung:', {
         pointer: { x: pointer.x.toFixed(0), y: pointer.y.toFixed(0) },
@@ -3483,51 +3505,58 @@ export class LineDrawingService {
     });
 
     // Special handling for T-pieces with connected lines
-    if ((component as any).customType === 'teeJoint' && (component as any).connectedLines) {
-      const connectedLines = (component as any).connectedLines;
-      console.log('🔗 T-piece has connectedLines:', connectedLines.length);
+    if ((component as any).customType === 'teeJoint') {
+      // First try to use stored connected lines
+      let connectedLines = (component as any).connectedLines;
 
-      // Use the first connected line as host line (these are the split pipeline segments)
-      if (connectedLines.length > 0) {
-        // Find the longest connected line to use as host
-        let longestLine = connectedLines[0];
-        let maxLength = 0;
+      // If connectedLines are missing or invalid, try to find them
+      if (!connectedLines || connectedLines.length < 2 ||
+          !connectedLines[0] || !connectedLines[1]) {
+        console.log('⚠️ ConnectedLines missing or invalid, searching for pipeline segments...');
 
-        connectedLines.forEach((line: any) => {
-          if (line && (line.type === 'line' || (line as any).customType === 'CustomLine')) {
-            let length = 0;
-            if ((line as any).customType === 'CustomLine') {
-              const coords = (line as any).calcLinePoints ? (line as any).calcLinePoints() : {
-                x1: line.x1 || 0,
-                y1: line.y1 || 0,
-                x2: line.x2 || 0,
-                y2: line.y2 || 0
-              };
-              const dx = coords.x2 - coords.x1;
-              const dy = coords.y2 - coords.y1;
-              length = Math.sqrt(dx * dx + dy * dy);
-            } else {
-              const dx = (line.x2 || 0) - (line.x1 || 0);
-              const dy = (line.y2 || 0) - (line.y1 || 0);
-              length = Math.sqrt(dx * dx + dy * dy);
-            }
+        // Find lines that are close to the T-piece position
+        const teeX = component.left || 0;
+        const teeY = component.top || 0;
+        const nearbyLines: fabric.Line[] = [];
 
-            console.log('  Connected line length:', length.toFixed(2));
+        canvas.getObjects().forEach(obj => {
+          if ((obj.type === 'line' || (obj as any).customType === 'CustomLine') &&
+              !(obj as any).isDimensionPart &&
+              !(obj as any).teeId) { // Exclude T-piece's own lines
 
-            if (length > maxLength) {
-              maxLength = length;
-              longestLine = line;
+            const line = obj as fabric.Line;
+            // Check distance from T-piece to line
+            const dist = this.distanceToLine(
+              { x: teeX, y: teeY },
+              { x: line.x1 || 0, y: line.y1 || 0 },
+              { x: line.x2 || 0, y: line.y2 || 0 }
+            );
+
+            if (dist < 10) { // Very close to T-piece
+              nearbyLines.push(line);
             }
           }
         });
 
-        if (longestLine && maxLength > 0) {
-          this.componentHostLine = longestLine;
-          console.log('✅ Using connected line as host line:', {
-            type: (longestLine as any).customType || longestLine.type,
-            length: maxLength.toFixed(2),
-            stroke: longestLine.stroke
-          });
+        // Store found lines as connected lines
+        if (nearbyLines.length >= 2) {
+          connectedLines = nearbyLines.slice(0, 2);
+          (component as any).connectedLines = connectedLines;
+          console.log('✅ Found and restored connectedLines:', connectedLines.length);
+        }
+      }
+
+      if (connectedLines && connectedLines.length >= 2) {
+        console.log('🔗 T-piece has connectedLines:', connectedLines.length);
+
+        // Use the first connected line as primary host
+        const line1 = connectedLines[0];
+        const line2 = connectedLines[1];
+
+        if (line1 && line2) {
+          // Store both lines for virtual line creation in mouse move
+          this.componentHostLine = line1; // Use first line as base
+          console.log('✅ Using connected lines for T-piece movement');
           return;
         }
       }
@@ -3700,6 +3729,79 @@ export class LineDrawingService {
       console.log('❌ No suitable host line found');
       this.componentHostLine = null;
     }
+  }
+
+  private findAllAnchorsOnLine(canvas: fabric.Canvas, hostLine: fabric.Line): { x: number, y: number }[] {
+    if (!canvas || !hostLine) return [];
+
+    // Get absolute line coordinates
+    let x1: number, y1: number, x2: number, y2: number;
+
+    if ((hostLine as any).customType === 'CustomLine') {
+      // CustomLine with relative coordinates
+      const centerX = hostLine.left || 0;
+      const centerY = hostLine.top || 0;
+      const coords = (hostLine as any).calcLinePoints ? (hostLine as any).calcLinePoints() : {
+        x1: hostLine.x1 || 0,
+        y1: hostLine.y1 || 0,
+        x2: hostLine.x2 || 0,
+        y2: hostLine.y2 || 0
+      };
+      x1 = centerX + coords.x1;
+      y1 = centerY + coords.y1;
+      x2 = centerX + coords.x2;
+      y2 = centerY + coords.y2;
+    } else {
+      // Standard line
+      x1 = hostLine.x1 || 0;
+      y1 = hostLine.y1 || 0;
+      x2 = hostLine.x2 || 0;
+      y2 = hostLine.y2 || 0;
+    }
+
+    // Find all anchor points
+    const allObjects = canvas.getObjects();
+    const anchors = allObjects.filter(obj => {
+      return (obj as any).isAnchor === true ||
+             (obj as any).customType === 'anchorPoint' ||
+             (obj.type === 'circle' && (obj as fabric.Circle).radius && (obj as fabric.Circle).radius < 10);
+    }) as fabric.Circle[];
+
+    // Filter anchors that are on or near the line
+    const maxDistance = 30; // Maximum distance from line to consider
+    const anchorsOnLine: { x: number, y: number }[] = [];
+
+    anchors.forEach(anchor => {
+      const anchorX = anchor.left || 0;
+      const anchorY = anchor.top || 0;
+
+      // Calculate distance from anchor to line
+      const dist = this.distanceToLine(
+        { x: anchorX, y: anchorY },
+        { x: x1, y: y1 },
+        { x: x2, y: y2 }
+      );
+
+      if (dist < maxDistance) {
+        // Also check if anchor is within the line segment bounds (with some tolerance)
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lengthSq = dx * dx + dy * dy;
+
+        if (lengthSq > 0) {
+          const t = ((anchorX - x1) * dx + (anchorY - y1) * dy) / lengthSq;
+
+          // Accept anchors that are along the line direction (even slightly beyond)
+          if (t >= -0.1 && t <= 1.1) {
+            anchorsOnLine.push({ x: anchorX, y: anchorY });
+            console.log(`  Found anchor on line at (${anchorX.toFixed(0)}, ${anchorY.toFixed(0)}), t=${t.toFixed(3)}`);
+          }
+        }
+      }
+    });
+
+    console.log(`🔍 Found ${anchorsOnLine.length} anchors on the line`);
+    return anchorsOnLine;
   }
 
   private findHostLineAnchors(canvas: fabric.Canvas, hostLine: fabric.Line): { start: { x: number, y: number }, end: { x: number, y: number } } | null {
@@ -3954,25 +4056,62 @@ export class LineDrawingService {
     // Apply anchor constraints for T-piece movement
     let constrainedT = rawT;
     if (anchors) {
-      // Calculate T-values for anchor positions
-      const startT = 0.0;  // Start anchor is always at t=0
-      const endT = 1.0;    // End anchor is always at t=1
-      
-      // Add small tolerance (5% of line) to prevent T-piece from reaching exactly the anchor
-      const tolerance = 0.05;
-      const minT = startT + tolerance;
-      const maxT = endT - tolerance;
-      
-      // Constrain T-value between anchors with tolerance
-      constrainedT = Math.max(minT, Math.min(maxT, rawT));
-      
-      console.log('🔒 Applied anchor constraints:', {
-        originalT: rawT.toFixed(3),
-        constrainedT: constrainedT.toFixed(3),
-        minT: minT.toFixed(3),
-        maxT: maxT.toFixed(3),
-        wasConstrained: Math.abs(constrainedT - rawT) > 0.001
-      });
+      // Find ALL anchors on the line (not just start and end)
+      const allAnchors = this.canvas ? this.findAllAnchorsOnLine(this.canvas, line) : [];
+
+      if (allAnchors.length > 0) {
+        // Calculate T-values for all anchor positions
+        const anchorTValues = allAnchors.map((anchor: { x: number, y: number }) => {
+          // Project anchor onto line to get its T value
+          const anchorT = ((anchor.x - x1) * dx + (anchor.y - y1) * dy) / lengthSq;
+          return anchorT;
+        }).sort((a: number, b: number) => a - b); // Sort T values in ascending order
+
+        // Find the nearest anchors before and after the desired position
+        let minT = 0.0;
+        let maxT = 1.0;
+
+        for (let i = 0; i < anchorTValues.length; i++) {
+          const anchorT = anchorTValues[i];
+          if (anchorT < rawT && anchorT > minT) {
+            minT = anchorT;
+          }
+          if (anchorT > rawT && anchorT < maxT) {
+            maxT = anchorT;
+            break; // We found the next anchor, no need to continue
+          }
+        }
+
+        // Add buffer distance from anchors (in pixels)
+        const bufferPixels = 20; // Minimum distance from anchors
+        const lineLength = Math.sqrt(lengthSq);
+        const bufferT = bufferPixels / lineLength;
+
+        // Apply buffer to constraints
+        minT = minT + bufferT;
+        maxT = maxT - bufferT;
+
+        // Ensure min and max don't cross
+        if (minT >= maxT) {
+          // Not enough space between anchors, use midpoint
+          const midT = (minT - bufferT + maxT + bufferT) / 2;
+          constrainedT = midT;
+        } else {
+          // Constrain T-value between anchors with buffer
+          constrainedT = Math.max(minT, Math.min(maxT, rawT));
+        }
+
+        console.log('🔒 Applied anchor constraints:', {
+          originalT: rawT.toFixed(3),
+          constrainedT: constrainedT.toFixed(3),
+          minT: minT.toFixed(3),
+          maxT: maxT.toFixed(3),
+          anchorCount: allAnchors.length,
+          anchorTValues: anchorTValues.map((t: number) => t.toFixed(3)),
+          bufferPixels,
+          wasConstrained: Math.abs(constrainedT - rawT) > 0.001
+        });
+      }
     }
 
     // Use constrained t value
