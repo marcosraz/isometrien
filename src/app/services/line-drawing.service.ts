@@ -3331,8 +3331,8 @@ export class LineDrawingService {
         y: pointer.y - (this.componentMouseOffset?.y || 0)
       };
 
-      // Projiziere auf die Host-Linie
-      const newPos = this.projectPointOnLine(desiredPos, effectiveHostLine);
+      // Projiziere auf die Host-Linie (pass component for T-piece anchor constraints)
+      const newPos = this.projectPointOnLine(desiredPos, effectiveHostLine, this.selectedComponent);
       
       console.log('🎯 Bewege T-Stück entlang Rohrleitung:', {
         pointer: { x: pointer.x.toFixed(0), y: pointer.y.toFixed(0) },
@@ -3731,7 +3731,7 @@ export class LineDrawingService {
     }
   }
 
-  private findAllAnchorsOnLine(canvas: fabric.Canvas, hostLine: fabric.Line): { x: number, y: number }[] {
+  private findAllAnchorsOnLine(canvas: fabric.Canvas, hostLine: fabric.Line, excludeComponentId?: string): { x: number, y: number }[] {
     if (!canvas || !hostLine) return [];
 
     // Get absolute line coordinates
@@ -3762,6 +3762,13 @@ export class LineDrawingService {
     // Find all anchor points
     const allObjects = canvas.getObjects();
     const anchors = allObjects.filter(obj => {
+      // Exclude anchors that belong to the component being moved
+      if (excludeComponentId &&
+          ((obj as any).componentId === excludeComponentId ||
+           (obj as any).teeId === excludeComponentId)) {
+        return false;
+      }
+
       return (obj as any).isAnchor === true ||
              (obj as any).customType === 'anchorPoint' ||
              (obj.type === 'circle' && (obj as fabric.Circle).radius && (obj as fabric.Circle).radius < 10);
@@ -3892,16 +3899,18 @@ export class LineDrawingService {
     return null;
   }
 
-  private projectPointOnLine(point: { x: number, y: number }, line: fabric.Line): { x: number, y: number } {
+  private projectPointOnLine(point: { x: number, y: number }, line: fabric.Line, component?: any): { x: number, y: number } {
     console.log('📐 projectPointOnLine called with:', {
       inputPoint: { x: point.x.toFixed(0), y: point.y.toFixed(0) },
       lineType: (line as any).customType || 'standard',
-      lineStroke: line.stroke
+      lineStroke: line.stroke,
+      hasComponent: !!component,
+      componentType: component ? (component as any).customType : null
     });
-    
+
     // Find anchor constraints for T-piece movement
     const anchors = this.canvas ? this.findHostLineAnchors(this.canvas, line) : null;
-    
+
     // Get absolute line coordinates
     let x1: number, y1: number, x2: number, y2: number;
     
@@ -4067,7 +4076,10 @@ export class LineDrawingService {
     let constrainedT = rawT;
     if (anchors) {
       // Find ALL anchors on the line (not just start and end)
-      const allAnchors = this.canvas ? this.findAllAnchorsOnLine(this.canvas, line) : [];
+      // For T-pieces, exclude their own anchors from the constraint calculation
+      const componentId = this.selectedComponent ?
+        ((this.selectedComponent as any).teeId || (this.selectedComponent as any).customId) : undefined;
+      const allAnchors = this.canvas ? this.findAllAnchorsOnLine(this.canvas, line, componentId) : [];
 
       if (allAnchors.length > 0) {
         // Calculate T-values for all anchor positions
@@ -4092,14 +4104,31 @@ export class LineDrawingService {
           }
         }
 
-        // Add buffer distance from anchors (in pixels)
-        const bufferPixels = 20; // Minimum distance from anchors
+        // Calculate line length first
         const lineLength = Math.sqrt(lengthSq);
+
+        // Calculate T-piece anchor offset if we have a T-piece component
+        let componentAnchorOffset = 0;
+        if (component && (component as any).customType === 'teeJoint') {
+          // T-pieces have anchors at ±20 pixels from center along the line
+          const teeAnchorDistance = 20; // Distance from T-piece center to its anchors
+          componentAnchorOffset = teeAnchorDistance / lineLength;
+
+          console.log('🔧 T-piece anchor offset calculation:', {
+            anchorDistance: teeAnchorDistance,
+            lineLength: lineLength.toFixed(1),
+            offsetInT: componentAnchorOffset.toFixed(4)
+          });
+        }
+
+        // Add buffer distance from anchors (in pixels)
+        const bufferPixels = 3; // Small buffer to prevent exact overlap
         const bufferT = bufferPixels / lineLength;
 
-        // Apply buffer to constraints
-        minT = minT + bufferT;
-        maxT = maxT - bufferT;
+        // Apply buffer and T-piece anchor offset to constraints
+        // For T-pieces: ensure T-piece's anchors don't go beyond pipeline anchors
+        minT = minT + bufferT + componentAnchorOffset;
+        maxT = maxT - bufferT - componentAnchorOffset;
 
         // Ensure min and max don't cross
         if (minT >= maxT) {
