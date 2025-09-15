@@ -106,11 +106,11 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   
   // Create the group with centered origin for consistent rotation behavior
   // Valve rotation logic
-  // The valve consists of two triangles forming a diagonal butterfly shape
-  // For consistent appearance, valves should maintain the same orientation
-  // regardless of line angle
+  // The valve should be at -30° offset from the line direction
+  // For a horizontal line (0°), the valve should be at -30°
+  // When mirrored (Ctrl pressed), flip the rotation to the opposite side
 
-  const valveAngle = 0; // Fixed orientation for all valves
+  const valveAngle = mirrored ? angle + 30 : angle - 30; // Mirror flips the rotation
 
   const group = new fabric.Group([triangle1, triangle2, flangeTop, flangeBottom], {
     left: x,
@@ -421,11 +421,11 @@ export function createGateValveSNew(x: number, y: number, angle: number, mirrore
   
   // Create the group with centered origin for consistent rotation behavior
   // Valve rotation logic
-  // The valve consists of two triangles forming a diagonal butterfly shape
-  // For consistent appearance, valves should maintain the same orientation
-  // regardless of line angle
+  // The valve should be at -30° offset from the line direction
+  // For a horizontal line (0°), the valve should be at -30°
+  // When mirrored (Ctrl pressed), flip the rotation to the opposite side
 
-  const valveAngle = 0; // Fixed orientation for all valves
+  const valveAngle = mirrored ? angle + 30 : angle - 30; // Mirror flips the rotation
 
   const group = new fabric.Group([triangle1, triangle2], {
     left: x,
