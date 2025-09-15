@@ -105,10 +105,21 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   }
   
   // Create the group with centered origin for consistent rotation behavior
+  // Adjust rotation for vertical lines
+  const normalizedAngle = ((angle % 360) + 360) % 360;
+  let valveAngle = angle;
+
+  // For vertical lines (90° and 270°), adjust the valve rotation
+  if ((normalizedAngle >= 80 && normalizedAngle <= 100) ||
+      (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+    // Rotate valve by -45° for better visual alignment on vertical lines
+    valveAngle = angle - 45;
+  }
+
   const group = new fabric.Group([triangle1, triangle2, flangeTop, flangeBottom], {
     left: x,
     top: y,
-    angle: angle,
+    angle: valveAngle,
     originX: 'center',
     originY: 'center',
     selectable: true,
@@ -413,10 +424,21 @@ export function createGateValveSNew(x: number, y: number, angle: number, mirrore
   }
   
   // Create the group with centered origin for consistent rotation behavior
+  // Adjust rotation for vertical lines
+  const normalizedAngle = ((angle % 360) + 360) % 360;
+  let valveAngle = angle;
+
+  // For vertical lines (90° and 270°), adjust the valve rotation
+  if ((normalizedAngle >= 80 && normalizedAngle <= 100) ||
+      (normalizedAngle >= 260 && normalizedAngle <= 280)) {
+    // Rotate valve by -45° for better visual alignment on vertical lines
+    valveAngle = angle - 45;
+  }
+
   const group = new fabric.Group([triangle1, triangle2], {
     left: x,
     top: y,
-    angle: angle,
+    angle: valveAngle,
     originX: 'center',
     originY: 'center',
     selectable: true,
