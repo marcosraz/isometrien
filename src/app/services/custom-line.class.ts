@@ -16,7 +16,7 @@ export class CustomLine extends fabric.Line {
     this.set({
       customType: 'CustomLine', // Identify this as a CustomLine
       perPixelTargetFind: true,
-      targetFindTolerance: 5,
+      targetFindTolerance: 15,
       transparentCorners: true, // Make corners transparent
       cornerColor: 'transparent', // Hide corner color
       cornerStyle: 'circle',
@@ -24,7 +24,7 @@ export class CustomLine extends fabric.Line {
       borderColor: 'transparent', // Hide border color
       borderDashArray: null,
       borderScaleFactor: 0,
-      padding: 10,
+      padding: 20,
       objectCaching: false, // Disable caching to ensure our custom rendering works
       hasControls: false, // Disable standard controls completely
       hasBorders: false, // Disable selection border

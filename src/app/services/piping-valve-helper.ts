@@ -178,9 +178,9 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
 export function createTeeJoint(x: number, y: number, angle: number, mirrored: boolean = false, flipped: boolean = false): any {
   // T-Stück OHNE Group für exakte Positionierung
   
-  // Länge der Liniensegmente
-  const segmentLength = 20;
-  const branchLength = 25;
+  // Länge der Liniensegmente - reduced to match valve size
+  const segmentLength = 18;
+  const branchLength = 22;
   
   // Berechne Abzweig-Winkel (60° oder -60° je nach Seite)
   const branchAngle = flipped ? -60 : 60;
@@ -208,7 +208,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
     y: y - segmentLength * sin
   };
   
-  // Rechts auf der Hauptlinie  
+  // Rechts auf der Hauptlinie
   const rightPoint = {
     x: x + segmentLength * cos,
     y: y + segmentLength * sin
@@ -226,7 +226,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   // Erstelle die drei Linien mit absoluten Koordinaten
   const leftLine = new CustomLine([leftPoint.x, leftPoint.y, x, y], {
     stroke: 'black',
-    strokeWidth: 2,
+    strokeWidth: 1,
     selectable: false,
     evented: false,
     hasControls: false,
@@ -237,7 +237,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   
   const rightLine = new CustomLine([x, y, rightPoint.x, rightPoint.y], {
     stroke: 'black',
-    strokeWidth: 2,
+    strokeWidth: 1,
     selectable: false,
     evented: false,
     hasControls: false,
@@ -248,7 +248,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   
   const branchLine = new CustomLine([x, y, branchEndPoint.x, branchEndPoint.y], {
     stroke: 'black',
-    strokeWidth: 2,
+    strokeWidth: 1,
     selectable: false,
     evented: false,
     hasControls: false,
@@ -261,8 +261,8 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   const selectionRect = new fabric.Rect({
     left: x,
     top: y,
-    width: 60,
-    height: 60,
+    width: 52,
+    height: 52,
     fill: 'transparent',
     stroke: 'transparent',
     strokeWidth: 0,
@@ -289,7 +289,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   const anchor1 = new fabric.Circle({
     left: leftPoint.x,
     top: leftPoint.y,
-    radius: 3,
+    radius: 2,
     fill: 'blue',
     stroke: 'darkblue',
     strokeWidth: 1,
@@ -305,7 +305,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   const anchor2 = new fabric.Circle({
     left: rightPoint.x,
     top: rightPoint.y,
-    radius: 3,
+    radius: 2,
     fill: 'blue',
     stroke: 'darkblue',
     strokeWidth: 1,
@@ -321,7 +321,7 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   const anchor3 = new fabric.Circle({
     left: branchEndPoint.x,
     top: branchEndPoint.y,
-    radius: 3,
+    radius: 2,
     fill: 'blue',
     stroke: 'darkblue',
     strokeWidth: 1,

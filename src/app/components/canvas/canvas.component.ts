@@ -98,7 +98,7 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
         height: height,
         backgroundColor: '#f3f3f3',
         perPixelTargetFind: true,   // Enable globally for better line selection
-        targetFindTolerance: 5,     // Global tolerance for selection
+        targetFindTolerance: 15,     // Increased global tolerance for easier selection
         renderOnAddRemove: true,
         skipTargetFind: false,
       });

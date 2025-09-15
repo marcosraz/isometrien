@@ -146,7 +146,50 @@ export class KeyboardShortcutsService {
         description: 'Move T-pieces and valves along pipes',
         handler: () => this.drawingService.setDrawingMode('moveComponent' as any)
       },
-      
+      {
+        key: 'k',
+        description: 'Place T-piece on pipe',
+        handler: () => {
+          const canvas = this.drawingService.getCanvas();
+          if (canvas) {
+            this.drawingService.getPipingService().setCanvas(canvas);
+            this.drawingService.getPipingService().startTeeJointMode();
+          }
+        }
+      },
+      {
+        key: '1',
+        description: 'Place Gate Valve S variant',
+        handler: () => {
+          console.log('Gate Valve S shortcut triggered');
+          const canvas = this.drawingService.getCanvas();
+          if (canvas) {
+            const pipingService = this.drawingService.getPipingService();
+            pipingService.setCanvas(canvas);
+            pipingService.startGateValveSMode();
+            console.log('Gate Valve S mode activated');
+          } else {
+            console.log('No canvas available for Gate Valve S');
+          }
+        }
+      },
+      {
+        key: '2',
+        description: 'Place Gate Valve FL variant',
+        handler: () => {
+          console.log('Gate Valve FL shortcut triggered');
+          const canvas = this.drawingService.getCanvas();
+          if (canvas) {
+            const pipingService = this.drawingService.getPipingService();
+            pipingService.setCanvas(canvas);
+            pipingService.startGateValveFLMode();
+            console.log('Gate Valve FL mode activated');
+          } else {
+            console.log('No canvas available for Gate Valve FL');
+          }
+        }
+      },
+
       // Undo/Redo
       {
         key: 'z',

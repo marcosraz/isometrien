@@ -862,12 +862,16 @@ export class DrawingService {
     // Reset selection rectangle
     this.hoveredTee.set({
       fill: 'transparent',
-      stroke: 'transparent', 
+      stroke: 'transparent',
       strokeWidth: 0,
       opacity: 0.1
     });
 
     this.hoveredTee = null;
     this.canvas.requestRenderAll();
+  }
+
+  public getPipingService(): any {
+    return this.pipingService;
   }
 }
