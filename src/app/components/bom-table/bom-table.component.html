@@ -1,0 +1,204 @@
+<div class="bom-table-container">
+  <!-- Toggle Button -->
+  <button
+    class="bom-toggle-btn"
+    (click)="toggleVisibility()"
+    [class.active]="isVisible"
+    title="Stückliste anzeigen/verbergen">
+    📋 BOM
+  </button>
+
+  <!-- BOM Table Panel -->
+  <div class="bom-panel" [class.visible]="isVisible">
+    <div class="bom-header">
+      <h3>Stückliste (BOM)</h3>
+      <div class="bom-controls">
+        <button
+          class="refresh-btn"
+          (click)="refreshBOM()"
+          [disabled]="isLoading"
+          title="Stückliste aktualisieren">
+          🔄
+        </button>
+        <button
+          class="close-btn"
+          (click)="toggleVisibility()"
+          title="Schließen">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div *ngIf="isLoading" class="loading-indicator">
+      <div class="spinner"></div>
+      <span>Berechne Stückliste...</span>
+    </div>
+
+    <!-- BOM Content -->
+    <div *ngIf="!isLoading && bomData" class="bom-content">
+      <!-- Summary Statistics -->
+      <div class="bom-summary">
+        <div class="summary-item">
+          <span class="label">Gesamtgewicht:</span>
+          <span class="value">{{ formatWeight(bomData.totalWeight) }} kg</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Gesamtteile:</span>
+          <span class="value">{{ getTotalItemsCount() }}</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Rohrlänge:</span>
+          <span class="value">{{ formatLength(getTotalPipeLength()) }} mm</span>
+        </div>
+        <div class="summary-item">
+          <span class="label">Letzte Aktualisierung:</span>
+          <span class="value">{{ getLastUpdatedTime() }}</span>
+        </div>
+      </div>
+
+      <!-- BOM Table by Categories -->
+      <div class="bom-categories" *ngIf="bomData.items.length > 0">
+        <div
+          *ngFor="let category of getCategories()"
+          class="category-section">
+
+          <div
+            class="category-header"
+            (click)="toggleRowExpansion('category-' + category)">
+            <span class="category-icon">{{ getCategoryIcon(category) }}</span>
+            <span class="category-name">{{ getCategoryName(category) }}</span>
+            <span class="category-count">({{ getItemsByCategory(category).length }})</span>
+            <span class="expand-icon" [class.expanded]="isRowExpanded('category-' + category)">▼</span>
+          </div>
+
+          <div
+            class="category-items"
+            [class.expanded]="isRowExpanded('category-' + category)">
+
+            <table class="bom-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Anzahl</th>
+                  <th>Länge (mm)</th>
+                  <th>DN</th>
+                  <th>Gewicht/Einheit (kg)</th>
+                  <th>Gesamtgewicht (kg)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <ng-container *ngFor="let item of getItemsByCategory(category)">
+                  <!-- Main Item Row -->
+                  <tr class="bom-item">
+                    <!-- Name -->
+                    <td class="item-name">
+                      {{ item.name }}
+                      <span *ngIf="item.customProperties?.segments > 1" class="segment-info">
+                        ({{ item.customProperties.segments }} Segmente)
+                      </span>
+                    </td>
+
+                    <!-- Count -->
+                    <td class="item-count">{{ item.count }}</td>
+
+                    <!-- Length -->
+                    <td class="item-length">
+                      {{ formatLength(item.length) }}
+                      <span *ngIf="item.customProperties?.averageLength" class="average-length">
+                        <br><small>⌀ {{ formatLength(item.customProperties.averageLength) }}/Segment</small>
+                      </span>
+                    </td>
+
+                    <!-- DN (Editable) -->
+                    <td class="item-dn">
+                      <div *ngIf="editingDN !== item.id" class="dn-display">
+                        <span (click)="startEditingDN(item)" class="editable-value">
+                          DN{{ item.dn }}
+                        </span>
+                      </div>
+                      <div *ngIf="editingDN === item.id" class="dn-edit">
+                        <select
+                          [(ngModel)]="tempDNValue"
+                          (keypress)="handleDNKeyPress($event, item)"
+                          (blur)="saveDNEdit(item)"
+                          class="dn-select"
+                          #dnSelect>
+                          <option *ngFor="let dn of standardDNValues" [value]="dn">
+                            DN{{ dn }}
+                          </option>
+                        </select>
+                      </div>
+                    </td>
+
+                    <!-- Weight per Unit (Editable) -->
+                    <td class="item-weight">
+                      <div *ngIf="editingWeight !== item.id" class="weight-display">
+                        <span (click)="startEditingWeight(item)" class="editable-value">
+                          {{ formatWeight(item.weightPerUnit) }}
+                        </span>
+                      </div>
+                      <div *ngIf="editingWeight === item.id" class="weight-edit">
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          [(ngModel)]="tempWeightValue"
+                          (keypress)="handleWeightKeyPress($event, item)"
+                          (blur)="saveWeightEdit(item)"
+                          class="weight-input"
+                          #weightInput />
+                      </div>
+                    </td>
+
+                    <!-- Total Weight -->
+                    <td class="item-total-weight">{{ formatWeight(item.totalWeight) }}</td>
+                  </tr>
+                </ng-container>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="bomData.items.length === 0" class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>Keine Objekte für Stückliste gefunden.</p>
+        <p>Zeichnen Sie Rohre, Ventile oder andere Komponenten, um eine Stückliste zu erstellen.</p>
+      </div>
+    </div>
+
+    <!-- Export Section -->
+    <div *ngIf="!isLoading && bomData && bomData.items.length > 0" class="bom-footer">
+      <div class="export-buttons">
+        <button
+          class="export-btn csv-btn"
+          (click)="downloadCSV()"
+          title="Als CSV exportieren">
+          📄 CSV Export
+        </button>
+        <button
+          class="export-btn json-btn"
+          (click)="downloadJSON()"
+          title="Als JSON exportieren">
+          📄 JSON Export
+        </button>
+        <button
+          class="export-btn pdf-btn"
+          (click)="exportToPDF()"
+          title="Als PDF exportieren (Vorschau)"
+          disabled>
+          📄 PDF Export
+        </button>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div *ngIf="!isLoading && !bomData" class="error-state">
+      <div class="error-icon">⚠️</div>
+      <p>Fehler beim Laden der Stückliste.</p>
+      <button (click)="refreshBOM()" class="retry-btn">Erneut versuchen</button>
+    </div>
+  </div>
+</div>
