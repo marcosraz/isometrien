@@ -267,6 +267,10 @@ export class ToolbarComponent {
     this.drawingService.setDrawingMode('spool');
   }
 
+  public startRevisionCloud(): void {
+    this.drawingService.setDrawingMode('revisionCloud');
+  }
+
   public togglePiping(): void {
     this.showPipingTools = !this.showPipingTools;
   }

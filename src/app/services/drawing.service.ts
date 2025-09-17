@@ -14,10 +14,10 @@ import { FreehandDrawingService } from './freehand-drawing.service';
 import { BehaviorSubject } from 'rxjs';
 
 // Central type for all drawing modes
-export type DrawingMode = 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' | 
-  'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' | 
-  'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' | 
-  'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' | 'movePipe' | 'moveComponent';
+export type DrawingMode = 'idle' | 'addLine' | 'addPipe' | 'dimension' | 'text' | 'addAnchors' |
+  'weldstamp' | 'welderstamp' | 'welderstampempty' | 'welderstampas' | 'weld' | 'fluidstamp' |
+  'spool' | 'flow' | 'gateValve' | 'gateValveS' | 'gateValveFL' | 'globeValveS' | 'globeValveFL' |
+  'ballValveS' | 'ballValveFL' | 'teeJoint' | 'slope' | 'testLine' | 'freehand' | 'movePipe' | 'moveComponent' | 'revisionCloud';
 
 // Global counter to track DrawingService instances
 let instanceCounter = 0;
@@ -90,7 +90,7 @@ export class DrawingService {
     this.pipingService.setStateManagement(this.stateManagementService);
     this.isometryToolsService.setStateManagement(this.stateManagementService);
     this.freehandDrawingService.setStateManagement(this.stateManagementService);
-    
+
     // Connect drawing service for color management
     this.lineDrawingService.setDrawingService(this);
     this.isometryToolsService.setDrawingService(this);
@@ -250,6 +250,9 @@ export class DrawingService {
     } else if (mode === 'freehand') {
       this.lineDrawingService.setDrawingMode('idle');
       this.freehandDrawingService.startFreehandDrawing();
+    } else if (mode === 'revisionCloud') {
+      this.lineDrawingService.setDrawingMode('idle');
+      this.objectManagementService.startRevisionCloud(this.canvas);
     } else {
       console.log('Entering else clause for mode:', mode);
       this.weldingService.stopWeldstamp();
@@ -259,6 +262,7 @@ export class DrawingService {
       this.weldingService.stopWeld();
       this.weldingService.stopFluidStamp();
       this.objectManagementService.stopSpoolMode();
+      this.objectManagementService.stopRevisionCloud();
       this.pipingService.stopFlowMode();
       this.pipingService.stopGateValveMode();
       this.pipingService.stopGateValveSMode();
@@ -285,18 +289,24 @@ export class DrawingService {
       this.pipingService.handleMouseDown(options);
       return;
     }
-    
+
     if (this.isometryToolsService.isSlopeModeActive()) {
       this.isometryToolsService.handleMouseDown(this.canvas, options);
       return;
     }
-    
+
+    // Handle Revision Cloud Mode
+    if (this.objectManagementService.isRevisionCloudMode()) {
+      this.objectManagementService.handleRevisionCloudClick(options);
+      return;
+    }
+
     // Handle Move Pipe Mode
     if (this.lineDrawingService.drawingMode === 'movePipe') {
       this.lineDrawingService.handleMovePipeMouseDown(this.canvas, options);
       return;
     }
-    
+
     // Handle Move Component Mode (for T-pieces and valves)
     if (this.lineDrawingService.drawingMode === 'moveComponent') {
       this.lineDrawingService.handleMoveComponentMouseDown(this.canvas, options);
@@ -308,6 +318,7 @@ export class DrawingService {
       // Freehand drawing is handled separately by its own service
       return;
     }
+
 
     const drawingMode = this.lineDrawingService.drawingMode;
 
@@ -363,9 +374,15 @@ export class DrawingService {
       this.pipingService.handleMouseMove(options);
       return;
     }
-    
+
     if (this.isometryToolsService.isSlopeModeActive()) {
       this.isometryToolsService.handleMouseMove(this.canvas, options);
+      return;
+    }
+
+    // Handle Revision Cloud Mode
+    if (this.objectManagementService.isRevisionCloudMode()) {
+      this.objectManagementService.handleRevisionCloudMouseMove(options);
       return;
     }
     
@@ -386,6 +403,7 @@ export class DrawingService {
       // Freehand drawing is handled separately by its own service
       return;
     }
+
 
     const drawingMode = this.lineDrawingService.drawingMode;
 
@@ -444,6 +462,11 @@ export class DrawingService {
         }
       }
     }
+  }
+
+  // Helper method to determine active mode
+  public getActiveMode(): string {
+    return this.lineDrawingService.drawingMode;
   }
 
   public handleSelectionCreated(e: any): void {
@@ -536,6 +559,9 @@ export class DrawingService {
     }
     if (this.freehandDrawingService && this.freehandDrawingService.isActive()) {
       return 'freehand';
+    }
+    if (this.objectManagementService.isRevisionCloudMode()) {
+      return 'revisionCloud';
     }
     return this.lineDrawingService.drawingMode as any;
   }

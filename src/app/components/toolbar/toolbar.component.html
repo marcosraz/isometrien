@@ -257,11 +257,17 @@
       <span class="icon">✖️</span>
       <span class="label">Schweißnaht</span>
     </button>
-    <button class="context-btn" (click)="startFluidStamp()" 
+    <button class="context-btn" (click)="startFluidStamp()"
             [class.active]="drawingService.drawingMode === 'fluidstamp'"
             title="Flansch Stempel">
       <span class="icon">⬡</span>
       <span class="label">Flansch</span>
+    </button>
+    <button class="context-btn" (click)="startRevisionCloud()"
+            [class.active]="drawingService.drawingMode === 'revisionCloud'"
+            title="Revisionswolke">
+      <span class="icon">☁️</span>
+      <span class="label">Revision Cloud</span>
     </button>
     <button class="context-btn" (click)="startSpool()" 
             [class.active]="drawingService.drawingMode === 'spool'"

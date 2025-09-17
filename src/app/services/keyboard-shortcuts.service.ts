@@ -158,6 +158,14 @@ export class KeyboardShortcutsService {
         }
       },
       {
+        key: 'c',
+        description: 'Start Revision Cloud',
+        handler: () => {
+          console.log('Revision Cloud shortcut triggered');
+          this.drawingService.setDrawingMode('revisionCloud');
+        }
+      },
+      {
         key: '1',
         description: 'Place Gate Valve S variant',
         handler: () => {
