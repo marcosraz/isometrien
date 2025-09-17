@@ -142,8 +142,19 @@ export class BOMService {
       objectGroups[objectType].push(obj);
     });
 
-    // Debug: Log grouped objects
+    // Debug: Log grouped objects with details
     console.log('📋 BOM: Grouped objects:', Object.keys(objectGroups));
+    Object.entries(objectGroups).forEach(([type, objs]) => {
+      console.log(`📋 BOM: Type "${type}": ${objs.length} objects`, {
+        sampleObject: objs[0] ? {
+          type: objs[0].type,
+          customType: (objs[0] as any).customType,
+          stroke: objs[0].stroke,
+          fill: objs[0].fill,
+          path: objs[0].type === 'path' ? (objs[0] as any).path?.slice(0, 2) : undefined
+        } : null
+      });
+    });
 
     // Process each object type
     Object.entries(objectGroups).forEach(([type, objs]) => {
@@ -155,6 +166,12 @@ export class BOMService {
         this.processValves(type, objs, items, valveCountsByType);
       } else if (this.isFittingType(type)) {
         this.processFittings(type, objs, items);
+      } else if (this.isArcType(type)) {
+        this.processArcs(type, objs, items);
+      } else if (type === 'path') {
+        // Check if any path objects are pipe arcs
+        console.log('📋 BOM: Found path objects, analyzing for pipe arcs...');
+        this.processPathObjects(objs, items);
       } else {
         console.log('📋 BOM: Unknown object type:', type, '- skipping');
       }
@@ -197,7 +214,7 @@ export class BOMService {
 
   private isPipeType(type: string): boolean {
     // Be more specific about what constitutes a pipe type
-    const validPipeTypes = ['pipe', 'line', 'path', 'CustomLine'];
+    const validPipeTypes = ['pipe', 'line', 'CustomLine'];
 
     // Exclude common non-pipe objects that might be misidentified
     const excludedTypes = ['anchor', 'dimension', 'text', 'welding', 'valve', 'tee', 'circle', 'rect'];
@@ -211,6 +228,14 @@ export class BOMService {
 
   private isFittingType(type: string): boolean {
     return ['teeJoint', 'flowArrow'].includes(type);
+  }
+
+  private isArcType(type: string): boolean {
+    // Detect arc/elbow types - common names for pipe elbows/bends
+    return ['arc', 'elbow', 'bend', 'curve', 'bogen', 'krümmer', 'winkel'].includes(type.toLowerCase()) ||
+           type.includes('arc') || type.includes('Arc') ||
+           type.includes('elbow') || type.includes('Elbow') ||
+           type.includes('bend') || type.includes('Bend');
   }
 
   private processPipes(objs: any[], items: BOMItem[], pipeLengthsByDN: Record<number, number>): void {
@@ -350,6 +375,90 @@ export class BOMService {
       };
 
       items.push(item);
+    }
+  }
+
+  private processArcs(type: string, objs: any[], items: BOMItem[]): void {
+    console.log('🔧 BOM: Processing', objs.length, 'arc objects of type', type);
+
+    // Group arcs by DN for counting
+    const arcsByDN: Record<number, any[]> = {};
+
+    objs.forEach(arc => {
+      const dn = this.getObjectDN(arc);
+      if (!arcsByDN[dn]) {
+        arcsByDN[dn] = [];
+      }
+      arcsByDN[dn].push(arc);
+    });
+
+    // Create BOM items for each DN group
+    Object.entries(arcsByDN).forEach(([dnStr, arcs]) => {
+      const dn = parseInt(dnStr);
+      const count = arcs.length;
+      const weightPerUnit = this.getArcWeight(dn);
+
+      const item: BOMItem = {
+        id: `arc-dn${dn}`,
+        type: 'Bogen',
+        name: `Bogen DN${dn} (90°)`,
+        count: count,
+        length: 0, // Arcs don't have length, just count
+        dn: dn,
+        weightPerUnit: weightPerUnit,
+        totalWeight: count * weightPerUnit,
+        category: 'fitting',
+        customProperties: {
+          arcType: type,
+          isStandardElbow: true
+        }
+      };
+
+      console.log('🔧 BOM: Created arc item:', {
+        name: item.name,
+        count: item.count,
+        dn: item.dn,
+        weight: item.totalWeight.toFixed(2) + 'kg'
+      });
+
+      items.push(item);
+    });
+
+    console.log('🔧 BOM: Total arc groups created:', Object.keys(arcsByDN).length);
+  }
+
+  private processPathObjects(objs: any[], items: BOMItem[]): void {
+    console.log('🔧 BOM: Processing', objs.length, 'path objects');
+
+    // Filter path objects that are pipe arcs (curved paths with quadratic curves)
+    const pipeArcs = objs.filter(obj => {
+      // Check if this is a pipe arc by looking at the path data
+      const pathData = obj.path;
+      if (!pathData || !Array.isArray(pathData)) return false;
+
+      // Look for quadratic curve commands (Q) which indicate arcs
+      const hasQuadraticCurve = pathData.some(command =>
+        Array.isArray(command) && command[0] === 'Q'
+      );
+
+      // Also check if it has pipe-like stroke color/properties
+      const isPipeStyled = obj.stroke && obj.fill === '';
+
+      console.log('🔧 BOM: Path object analysis:', {
+        hasQuadraticCurve,
+        isPipeStyled,
+        pathData: pathData?.slice(0, 2), // Log first 2 commands for debugging
+        stroke: obj.stroke
+      });
+
+      return hasQuadraticCurve && isPipeStyled;
+    });
+
+    console.log('🔧 BOM: Found', pipeArcs.length, 'pipe arcs in path objects');
+
+    if (pipeArcs.length > 0) {
+      // Process the pipe arcs like regular arcs
+      this.processArcs('path', pipeArcs, items);
     }
   }
 
@@ -516,6 +625,33 @@ export class BOMService {
     }
     // Simplified fitting weights
     return Math.max(5, dn * 0.1); // Basic calculation
+  }
+
+  private getArcWeight(dn: number): number {
+    const objectKey = `arc-dn${dn}`;
+    if (this.customWeightSettings[objectKey]) {
+      return this.customWeightSettings[objectKey];
+    }
+
+    // Standard arc/elbow weights based on DN
+    const standardArcWeights: Record<number, number> = {
+      15: 0.3,   // DN15 elbow ~0.3kg
+      20: 0.4,   // DN20 elbow ~0.4kg
+      25: 0.6,   // DN25 elbow ~0.6kg
+      32: 0.8,   // DN32 elbow ~0.8kg
+      40: 1.2,   // DN40 elbow ~1.2kg
+      50: 1.8,   // DN50 elbow ~1.8kg
+      65: 2.5,   // DN65 elbow ~2.5kg
+      80: 3.2,   // DN80 elbow ~3.2kg
+      100: 4.5,  // DN100 elbow ~4.5kg
+      125: 6.8,  // DN125 elbow ~6.8kg
+      150: 9.5,  // DN150 elbow ~9.5kg
+      200: 16.0, // DN200 elbow ~16kg
+      250: 25.0, // DN250 elbow ~25kg
+      300: 35.0  // DN300 elbow ~35kg
+    };
+
+    return standardArcWeights[dn] || (dn / 50) * 1.8; // Fallback formula based on DN
   }
 
   private getValveName(type: string): string {
