@@ -153,6 +153,7 @@ export class BomTableComponent implements OnInit, OnDestroy {
       'pipe': '🔧',
       'valve': '🔩',
       'fitting': '⚙️',
+      'weld': '🔥',
       'other': '📦'
     };
     return icons[category] || '📦';
@@ -163,6 +164,7 @@ export class BomTableComponent implements OnInit, OnDestroy {
       'pipe': 'Rohre',
       'valve': 'Ventile',
       'fitting': 'Formstücke',
+      'weld': 'Schweißnähte',
       'other': 'Sonstiges'
     };
     return names[category] || 'Sonstiges';

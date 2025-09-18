@@ -11,7 +11,7 @@ export interface BOMItem {
   dn: number; // Diameter nominal
   weightPerUnit: number; // kg per unit or kg per meter for pipes
   totalWeight: number;
-  category: 'pipe' | 'valve' | 'fitting' | 'other';
+  category: 'pipe' | 'valve' | 'fitting' | 'weld' | 'other';
   customProperties?: any;
 }
 
@@ -176,6 +176,9 @@ export class BOMService {
         console.log('📋 BOM: Unknown object type:', type, '- skipping');
       }
     });
+
+    // Process welds after all other objects (requires anchor analysis)
+    this.processWelds(canvas, items);
 
     console.log('📋 BOM: Generated', items.length, 'BOM items');
 
@@ -460,6 +463,118 @@ export class BOMService {
       // Process the pipe arcs like regular arcs
       this.processArcs('path', pipeArcs, items);
     }
+  }
+
+  private processWelds(canvas: fabric.Canvas, items: BOMItem[]): void {
+    console.log('🔥 BOM: Processing welds at pipe junction points...');
+
+    // Find all anchor points
+    const allObjects = canvas.getObjects();
+    const anchors = allObjects.filter(obj => {
+      return (obj as any).isAnchor === true ||
+             (obj as any).customType === 'anchorPoint';
+    }) as fabric.Circle[];
+
+    console.log('🔥 BOM: Found', anchors.length, 'total anchor points');
+
+    // Find all pipe objects to determine start/end points
+    const pipeObjects = allObjects.filter(obj => {
+      const type = (obj as any).customType || obj.type;
+      return this.isPipeType(type) || type === 'path';
+    });
+
+    console.log('🔥 BOM: Found', pipeObjects.length, 'pipe objects for analysis');
+
+    // Identify junction welds (anchors that connect multiple pipe segments)
+    const junctionWelds: fabric.Circle[] = [];
+
+    anchors.forEach(anchor => {
+      // Count how many pipes/paths this anchor is connected to
+      const connectedPipes = this.findConnectedPipes(anchor, pipeObjects);
+
+      console.log('🔥 BOM: Anchor at', {
+        x: Math.round(anchor.left || 0),
+        y: Math.round(anchor.top || 0),
+        connectedPipes: connectedPipes.length
+      });
+
+      // A weld point exists where 2 or more pipe segments meet
+      // But exclude single-pipe start/end points
+      if (connectedPipes.length >= 2) {
+        junctionWelds.push(anchor);
+        console.log('🔥 BOM: ✅ Weld point identified');
+      }
+    });
+
+    console.log('🔥 BOM: Found', junctionWelds.length, 'junction welds');
+
+    if (junctionWelds.length > 0) {
+      // Create BOM entry for welds
+      const weldItem: BOMItem = {
+        id: 'welds-junction',
+        type: 'Schweißnaht',
+        name: 'Schweißnähte (Rohrverbindungen)',
+        count: junctionWelds.length,
+        length: 0, // Welds don't have length
+        dn: 50, // Average DN for weight calculation
+        weightPerUnit: 0.1, // Minimal weight for welding material
+        totalWeight: junctionWelds.length * 0.1,
+        category: 'weld',
+        customProperties: {
+          weldType: 'junction',
+          locations: junctionWelds.map(weld => ({
+            x: Math.round(weld.left || 0),
+            y: Math.round(weld.top || 0)
+          }))
+        }
+      };
+
+      items.push(weldItem);
+      console.log('🔥 BOM: Added weld item:', weldItem.name, '- Count:', weldItem.count);
+    }
+  }
+
+  private findConnectedPipes(anchor: fabric.Circle, pipeObjects: fabric.Object[]): fabric.Object[] {
+    const anchorX = anchor.left || 0;
+    const anchorY = anchor.top || 0;
+    const tolerance = 5; // Tolerance for connection detection
+
+    return pipeObjects.filter(pipe => {
+      // Check if this pipe connects to the anchor point
+      return this.isPipeConnectedToPoint(pipe, anchorX, anchorY, tolerance);
+    });
+  }
+
+  private isPipeConnectedToPoint(pipe: fabric.Object, x: number, y: number, tolerance: number): boolean {
+    if (pipe.type === 'line') {
+      // For line objects, check start and end points
+      const line = pipe as fabric.Line;
+      const x1 = line.x1 || 0;
+      const y1 = line.y1 || 0;
+      const x2 = line.x2 || 0;
+      const y2 = line.y2 || 0;
+
+      // Transform to global coordinates
+      const matrix = pipe.calcTransformMatrix();
+      const point1 = fabric.util.transformPoint({ x: x1, y: y1 }, matrix);
+      const point2 = fabric.util.transformPoint({ x: x2, y: y2 }, matrix);
+
+      const dist1 = Math.sqrt((point1.x - x) ** 2 + (point1.y - y) ** 2);
+      const dist2 = Math.sqrt((point2.x - x) ** 2 + (point2.y - y) ** 2);
+
+      return dist1 <= tolerance || dist2 <= tolerance;
+    } else if (pipe.type === 'path') {
+      // For path objects (arcs), check if any part is near the point
+      const pathBounds = pipe.getBoundingRect();
+      const centerX = pathBounds.left + pathBounds.width / 2;
+      const centerY = pathBounds.top + pathBounds.height / 2;
+
+      // Simplified check: if anchor is near the path bounding area
+      const dist = Math.sqrt((centerX - x) ** 2 + (centerY - y) ** 2);
+      return dist <= tolerance + Math.max(pathBounds.width, pathBounds.height) / 2;
+    }
+
+    return false;
   }
 
   private calculatePipeLength(pipe: any): number {
