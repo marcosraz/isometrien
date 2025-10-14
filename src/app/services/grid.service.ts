@@ -47,23 +47,62 @@ export class GridService {
   
   private createGridPattern(): void {
     const gridSize = this._gridState.value.size;
-    
-    // Create grid pattern canvas
+
+    // Create a larger pattern canvas to accommodate isometric grid
+    // For isometric grid, we need to create a diamond pattern
+    // The pattern repeats every 2x gridSize horizontally and vertically
     const patternCanvas = document.createElement('canvas');
-    patternCanvas.width = gridSize;
-    patternCanvas.height = gridSize;
+    const patternWidth = gridSize * 2;
+    const patternHeight = gridSize * 2;
+    patternCanvas.width = patternWidth;
+    patternCanvas.height = patternHeight;
     const ctx = patternCanvas.getContext('2d')!;
-    
-    // Draw grid lines
+
+    // Clear canvas
+    ctx.clearRect(0, 0, patternWidth, patternHeight);
+
+    // Draw isometric grid lines
     ctx.strokeStyle = '#ddd';
     ctx.lineWidth = 0.5;
     ctx.beginPath();
+
+    // Isometric grid has three main directions:
+    // 1. Vertical lines (Z-axis)
+    // 2. 30° lines going up-right (X-axis)
+    // 3. 30° lines going up-left (Y-axis)
+
+    // For 30° angle: rise/run = tan(30°) = 1/√3 ≈ 0.577
+    // This means for every 2 pixels horizontal, we go ~1.15 pixels vertical
+    // But using the 2:1 rule is simpler: for every 2 units horizontal, 1 unit vertical
+
+    // Vertical line at left edge (Z-axis)
     ctx.moveTo(0, 0);
-    ctx.lineTo(gridSize, 0);
+    ctx.lineTo(0, patternHeight);
+
+    // Vertical line at middle
+    ctx.moveTo(gridSize, 0);
+    ctx.lineTo(gridSize, patternHeight);
+
+    // 30° line going down-right (from top-left, X-axis direction)
+    // Starting from top-left corner
     ctx.moveTo(0, 0);
+    ctx.lineTo(patternWidth, gridSize);
+
+    // Parallel 30° line shifted down
+    ctx.moveTo(0, gridSize);
+    ctx.lineTo(patternWidth, patternHeight);
+
+    // 30° line going down-left (from top-right, Y-axis direction)
+    // Starting from top-right corner
+    ctx.moveTo(patternWidth, 0);
     ctx.lineTo(0, gridSize);
+
+    // Parallel 30° line shifted down
+    ctx.moveTo(patternWidth, gridSize);
+    ctx.lineTo(0, patternHeight);
+
     ctx.stroke();
-    
+
     // Create fabric pattern
     this.gridPattern = new fabric.Pattern({
       source: patternCanvas,
