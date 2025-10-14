@@ -751,4 +751,11 @@ export class ObjectManagementService {
     return area < 0;
   }
 
+  /**
+   * Reset spool counter to initial value
+   */
+  public resetSpoolCounter(): void {
+    this.spoolCounter = 1;
+  }
+
 }

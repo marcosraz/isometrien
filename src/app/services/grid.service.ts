@@ -48,12 +48,20 @@ export class GridService {
   private createGridPattern(): void {
     const gridSize = this._gridState.value.size;
 
-    // Create a larger pattern canvas to accommodate isometric grid
-    // For isometric grid, we need to create a diamond pattern
-    // The pattern repeats every 2x gridSize horizontally and vertically
+    // MATHEMATISCH KORREKTE 30° WINKEL:
+    // tan(30°) = 1/√3 ≈ 0.57735
+    // Das bedeutet: für "gridSize" Einheiten horizontal → gridSize * tan(30°) Einheiten vertikal
+
+    // Für ein sich wiederholendes Pattern brauchen wir:
+    // - Horizontale Breite: 2 * gridSize (für beide schrägen Achsen)
+    // - Vertikale Höhe: 2 * gridSize * tan(30°) für die volle Raute
+
+    const tan30 = Math.tan(30 * Math.PI / 180); // = 1/√3 ≈ 0.57735
+
     const patternCanvas = document.createElement('canvas');
     const patternWidth = gridSize * 2;
-    const patternHeight = gridSize * 2;
+    const patternHeight = gridSize * 2 * tan30; // Exakte 30° Höhe
+
     patternCanvas.width = patternWidth;
     patternCanvas.height = patternHeight;
     const ctx = patternCanvas.getContext('2d')!;
@@ -66,40 +74,46 @@ export class GridService {
     ctx.lineWidth = 0.5;
     ctx.beginPath();
 
-    // Isometric grid has three main directions:
-    // 1. Vertical lines (Z-axis)
-    // 2. 30° lines going up-right (X-axis)
-    // 3. 30° lines going up-left (Y-axis)
+    // KORREKTE ISOMETRISCHE PROJEKTION MIT EXAKTEN 30° WINKELN:
+    // 1. Z-Achse: Vertikal (senkrecht)
+    // 2. X-Achse: Exakt 30° zur Horizontalen nach RECHTS OBEN
+    // 3. Y-Achse: Exakt 30° zur Horizontalen nach LINKS OBEN
 
-    // For 30° angle: rise/run = tan(30°) = 1/√3 ≈ 0.577
-    // This means for every 2 pixels horizontal, we go ~1.15 pixels vertical
-    // But using the 2:1 rule is simpler: for every 2 units horizontal, 1 unit vertical
-
-    // Vertical line at left edge (Z-axis)
+    // VERTIKALE LINIEN (Z-Achse - senkrecht nach oben)
+    // Diese laufen durch, aber wir zeichnen sie nur im Pattern-Bereich
     ctx.moveTo(0, 0);
     ctx.lineTo(0, patternHeight);
 
-    // Vertical line at middle
     ctx.moveTo(gridSize, 0);
     ctx.lineTo(gridSize, patternHeight);
 
-    // 30° line going down-right (from top-left, X-axis direction)
-    // Starting from top-left corner
+    // X-ACHSE LINIEN (exakt 30° nach RECHTS OBEN)
+    // Von unten-links nach oben-rechts
+    // Steigung: -tan(30°) (negativ weil Y nach unten wächst)
+    ctx.moveTo(0, patternHeight);
+    ctx.lineTo(patternWidth, 0);
+
+    // Parallele X-Achse Linie (eine Einheit nach oben versetzt)
     ctx.moveTo(0, 0);
-    ctx.lineTo(patternWidth, gridSize);
+    ctx.lineTo(patternWidth, -patternHeight);
 
-    // Parallel 30° line shifted down
-    ctx.moveTo(0, gridSize);
-    ctx.lineTo(patternWidth, patternHeight);
+    // Zusätzliche Linie für nahtloses Pattern
+    ctx.moveTo(-patternWidth, patternHeight);
+    ctx.lineTo(0, 0);
 
-    // 30° line going down-left (from top-right, Y-axis direction)
-    // Starting from top-right corner
+    // Y-ACHSE LINIEN (exakt 30° nach LINKS OBEN)
+    // Von unten-rechts nach oben-links
+    // Steigung: +tan(30°) in negativer X-Richtung
+    ctx.moveTo(patternWidth, patternHeight);
+    ctx.lineTo(0, 0);
+
+    // Parallele Y-Achse Linie
     ctx.moveTo(patternWidth, 0);
-    ctx.lineTo(0, gridSize);
+    ctx.lineTo(0, -patternHeight);
 
-    // Parallel 30° line shifted down
-    ctx.moveTo(patternWidth, gridSize);
-    ctx.lineTo(0, patternHeight);
+    // Zusätzliche Linie für nahtloses Pattern
+    ctx.moveTo(patternWidth * 2, patternHeight);
+    ctx.lineTo(patternWidth, 0);
 
     ctx.stroke();
 

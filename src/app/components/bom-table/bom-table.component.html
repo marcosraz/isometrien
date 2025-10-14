@@ -1,18 +1,16 @@
-<div class="bom-table-container">
-  <!-- Toggle Button -->
-  <button
-    class="bom-toggle-btn"
-    (click)="toggleVisibility()"
-    [class.active]="isVisible"
-    title="Stückliste anzeigen/verbergen">
-    📋 BOM
-  </button>
-
+<div class="bom-table-container" [class.pinned]="isPinned">
   <!-- BOM Table Panel -->
-  <div class="bom-panel" [class.visible]="isVisible">
+  <div class="bom-panel" [class.visible]="isVisible" [class.pinned]="isPinned">
     <div class="bom-header">
       <h3>Stückliste (BOM)</h3>
       <div class="bom-controls">
+        <button
+          class="pin-btn"
+          (click)="togglePin()"
+          [class.active]="isPinned"
+          title="An rechter Seite anheften/lösen">
+          {{ isPinned ? '📌' : '📍' }}
+        </button>
         <button
           class="refresh-btn"
           (click)="refreshBOM()"

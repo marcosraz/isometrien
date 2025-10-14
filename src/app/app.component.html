@@ -1,5 +1,5 @@
 <div class="app-wrapper">
-  <app-toolbar></app-toolbar>
+  <app-toolbar (toggleBOMTable)="handleToggleBOM()"></app-toolbar>
   <div class="canvas-area" [class.sidebar-collapsed]="sidebarCollapsed">
     <app-canvas></app-canvas>
     <app-bom-table [canvas]="drawingService.getCanvas()"></app-bom-table>

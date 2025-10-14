@@ -217,7 +217,57 @@ $transition-normal: all 0.3s ease;
     background: $border-color;
     margin: 8px 0;
   }
-  
+
+  .file-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 15px;
+
+    .file-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px solid $border-color;
+      border-radius: 6px;
+      background: $darker-bg;
+      color: $text-primary;
+      cursor: pointer;
+      transition: $transition-fast;
+      font-size: 12px;
+
+      &.new-sheet {
+        border-color: $secondary-color;
+
+        &:hover {
+          background: $secondary-color;
+          border-color: $secondary-color;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+        }
+      }
+
+      &.export {
+        &:hover {
+          background: $primary-color;
+          border-color: $primary-color;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 8px rgba(37, 99, 235, 0.3);
+        }
+      }
+
+      .icon {
+        font-size: 16px;
+      }
+
+      .label {
+        font-weight: 600;
+        flex: 1;
+      }
+    }
+  }
+
   .color-controls {
     margin-bottom: 15px;
 

@@ -28,4 +28,10 @@ export class AppComponent {
   get sidebarCollapsed(): boolean {
     return this.toolbar?.sidebarCollapsed || false;
   }
+
+  public handleToggleBOM(): void {
+    if (this.bomTable) {
+      this.bomTable.toggleVisibility();
+    }
+  }
 }

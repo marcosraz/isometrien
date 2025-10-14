@@ -417,24 +417,59 @@ export class LineDrawingService {
     const dx = end.x - start.x;
     const dy = end.y - start.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Berechne den Winkel in Grad
+
+    // Berechne den Winkel in Grad (Canvas-Koordinaten: Y wächst nach unten!)
     let angle = Math.atan2(dy, dx) * 180 / Math.PI;
-    
-    // Bestimme den Snap-Winkel basierend auf den aktiven Modi
-    let snapAngle = 30; // Standard
+
+    // Bestimme den Snap-Modus
+    let snapMode: 'iso30' | 'angle15' | 'angle45' = 'iso30';
     if (this.isShiftPressed || this.snap15Enabled) {
-      snapAngle = 15;
+      snapMode = 'angle15';
     } else if (this.snap45Enabled) {
-      snapAngle = 45;
+      snapMode = 'angle45';
     } else if (this.snapEnabled) {
-      snapAngle = 30;
+      snapMode = 'iso30';
     }
-    
-    // Runde auf das nächste Vielfache des snap angles
-    const snappedAngle = Math.round(angle / snapAngle) * snapAngle;
+
+    let snappedAngle: number;
+
+    if (snapMode === 'iso30') {
+      // ISOMETRISCHE 30° ACHSEN:
+      // - Horizontal rechts: 0°
+      // - X-Achse (rechts oben): -30° (weil Y nach unten wächst im Canvas)
+      // - Vertikal oben: -90°
+      // - Y-Achse (links oben): -150°
+      // - Horizontal links: 180° / -180°
+      // - Y-Achse gespiegelt (links unten): 150°
+      // - Vertikal unten: 90°
+      // - X-Achse gespiegelt (rechts unten): 30°
+
+      const isoAngles = [-150, -90, -30, 0, 30, 90, 150, 180];
+
+      // Finde den nächsten isometrischen Winkel
+      let minDiff = Infinity;
+      snappedAngle = angle;
+
+      for (const isoAngle of isoAngles) {
+        let diff = Math.abs(angle - isoAngle);
+        // Behandle 180°/-180° Grenze
+        if (diff > 180) diff = 360 - diff;
+
+        if (diff < minDiff) {
+          minDiff = diff;
+          snappedAngle = isoAngle;
+        }
+      }
+    } else if (snapMode === 'angle15') {
+      // 15° Raster: alle 15°
+      snappedAngle = Math.round(angle / 15) * 15;
+    } else {
+      // 45° Raster
+      snappedAngle = Math.round(angle / 45) * 45;
+    }
+
     const snappedRad = snappedAngle * Math.PI / 180;
-    
+
     return {
       x: start.x + distance * Math.cos(snappedRad),
       y: start.y + distance * Math.sin(snappedRad)
@@ -4752,5 +4787,14 @@ export class LineDrawingService {
         }
       });
     }
+  }
+
+  /**
+   * Clear all data (editable lines and pipes)
+   */
+  public clearAllData(): void {
+    this.editableLines = [];
+    this.editablePipes = [];
+    this.pipePoints = [];
   }
 }

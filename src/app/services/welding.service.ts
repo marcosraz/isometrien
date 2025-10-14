@@ -1678,4 +1678,14 @@ export class WeldingService {
   public resetNumbering(): void {
     this.currentWeldNumber = 1;
   }
+
+  /**
+   * Reset all welding counters to initial state
+   */
+  public resetCounters(): void {
+    this.currentWeldNumber = 1;
+    this.currentWelderNumber = 1;
+    this.currentFluidNumber = 1;
+    this.weldStamps = [];
+  }
 }

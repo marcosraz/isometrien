@@ -17,6 +17,7 @@ export class BomTableComponent implements OnInit, OnDestroy {
 
   public bomData: BOMData | null = null;
   public isVisible: boolean = false;
+  public isPinned: boolean = false;
   public expandedRows: Set<string> = new Set();
   public isLoading: boolean = false;
 
@@ -63,6 +64,10 @@ export class BomTableComponent implements OnInit, OnDestroy {
     if (this.isVisible) {
       this.refreshBOM();
     }
+  }
+
+  public togglePin(): void {
+    this.isPinned = !this.isPinned;
   }
 
   public refreshBOM(): void {

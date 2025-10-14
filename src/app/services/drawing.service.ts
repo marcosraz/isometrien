@@ -900,4 +900,49 @@ export class DrawingService {
   public getPipingService(): any {
     return this.pipingService;
   }
+
+  /**
+   * Clears the entire canvas and resets all drawing states
+   * This is equivalent to starting a new drawing sheet
+   */
+  public clearCanvas(): void {
+    if (!this.canvas) {
+      console.warn('Canvas not available for clearing');
+      return;
+    }
+
+    // Ask for confirmation
+    const confirmed = confirm('Möchten Sie wirklich ein neues Blatt beginnen? Alle nicht gespeicherten Änderungen gehen verloren.');
+
+    if (!confirmed) {
+      return;
+    }
+
+    // Clear all objects from canvas
+    this.canvas.clear();
+
+    // Reset canvas background to default
+    this.canvas.backgroundColor = '#f3f3f3';
+
+    // Reset drawing mode to idle
+    this.setDrawingMode('idle');
+
+    // Clear state management history
+    this.stateManagementService.clearHistory();
+
+    // Clear line drawing service data
+    this.lineDrawingService.clearAllData();
+
+    // Reset welding service counters
+    this.weldingService.resetCounters();
+
+    // Reset object management service
+    this.objectManagementService.resetSpoolCounter();
+
+    // Render the empty canvas
+    this.canvas.requestRenderAll();
+
+    console.log('Canvas cleared - new drawing sheet ready');
+  }
 }
+

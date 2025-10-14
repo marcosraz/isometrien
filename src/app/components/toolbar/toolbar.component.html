@@ -62,6 +62,15 @@
         <span class="label" *ngIf="!sidebarCollapsed">Objekte</span>
       </div>
     </div>
+
+    <!-- File & Export Section -->
+    <div class="tool-section">
+      <div class="section-header" (click)="toggleSection('file')"
+           [class.active]="activeSection === 'file'">
+        <span class="icon">📁</span>
+        <span class="label" *ngIf="!sidebarCollapsed">Datei</span>
+      </div>
+    </div>
   </div>
 
   <!-- Bottom Actions -->
@@ -79,15 +88,21 @@
         </button>
         <div class="grid-size-control">
           <label>Größe: {{ (gridService.gridState | async)?.size }}px</label>
-          <input type="range" 
-                 min="5" 
-                 max="100" 
+          <input type="range"
+                 min="5"
+                 max="100"
                  step="5"
                  [value]="(gridService.gridState | async)?.size"
                  (input)="setGridSize($event)"
                  title="Grid-Größe anpassen">
         </div>
       </div>
+      <button class="grid-btn bom-btn"
+              (click)="toggleBOM()"
+              title="Stückliste (BOM) anzeigen/ausblenden">
+        <span class="icon">📋</span>
+        <span class="label">BOM Liste</span>
+      </button>
     </div>
     
     <div class="snap-controls">
@@ -136,6 +151,17 @@
           Norm
         </button>
       </div>
+    </div>
+    <div class="divider"></div>
+    <div class="file-actions">
+      <button class="file-btn new-sheet" (click)="clearCanvas()" title="Neues Blatt beginnen">
+        <span class="icon">📄</span>
+        <span class="label">Neues Blatt</span>
+      </button>
+      <button class="file-btn export" (click)="exportAsPNG()" title="Als PNG exportieren">
+        <span class="icon">🖼️</span>
+        <span class="label">PNG Export</span>
+      </button>
     </div>
     <div class="divider"></div>
     <div class="footer-buttons-row">
@@ -380,11 +406,39 @@
       <span class="label">Aufheben</span>
     </button>
   </div>
-  
-  <!-- Export Tools -->
-  <div class="context-section export-section">
-    <div class="export-header">Export</div>
+
+  <!-- File & Export Tools -->
+  <div class="context-section" *ngIf="activeSection === 'file'">
+    <button class="context-btn new-sheet-btn" (click)="clearCanvas()" title="Neues Blatt beginnen">
+      <span class="icon">📄</span>
+      <span class="label">Neues Blatt</span>
+    </button>
+    <button class="context-btn" (click)="exportAsPNG()" title="Als PNG exportieren">
+      <span class="icon">🖼️</span>
+      <span class="label">PNG</span>
+    </button>
+    <button class="context-btn" (click)="exportAsSVG()" title="Als SVG exportieren">
+      <span class="icon">📐</span>
+      <span class="label">SVG</span>
+    </button>
+    <button class="context-btn" (click)="exportAsJSON()" title="Als JSON exportieren">
+      <span class="icon">💾</span>
+      <span class="label">JSON</span>
+    </button>
+    <button class="context-btn" (click)="printCanvas()" title="Drucken">
+      <span class="icon">🖨️</span>
+      <span class="label">Drucken</span>
+    </button>
+  </div>
+
+  <!-- Old File & Export Section (keeping for compatibility) -->
+  <div class="context-section export-section" style="display: none;">
+    <div class="export-header">Datei & Export</div>
     <div class="export-buttons">
+      <button class="export-btn new-sheet-btn" (click)="clearCanvas()" title="Neues Blatt beginnen">
+        <span class="icon">📄</span>
+        <span class="label">Neues Blatt</span>
+      </button>
       <button class="export-btn" (click)="exportAsPNG()" title="Als PNG exportieren">
         <span class="icon">🖼️</span>
         <span class="label">PNG</span>

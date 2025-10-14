@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DrawingService } from '../../services/drawing.service';
@@ -32,6 +32,8 @@ export class ToolbarComponent {
   public strokeWidth: number = 2;
   private escPressCount: number = 0;
   private escResetTimeout: any = null;
+
+  @Output() toggleBOMTable = new EventEmitter<void>();
   
   constructor(
     public drawingService: DrawingService,
@@ -554,7 +556,7 @@ export class ToolbarComponent {
       '5 - Ventile einfügen\n\n' +
       'Wähle eine Option (1-5):'
     );
-    
+
     switch(choice) {
       case '1':
         this.drawingService.setDrawingMode('addPipe');
@@ -582,5 +584,13 @@ export class ToolbarComponent {
         }
         break;
     }
+  }
+
+  public clearCanvas(): void {
+    this.drawingService.clearCanvas();
+  }
+
+  public toggleBOM(): void {
+    this.toggleBOMTable.emit();
   }
 }

@@ -460,4 +460,11 @@ export class StateManagementService {
     this.states = [];
     this.currentStateIndex = -1;
   }
+
+  /**
+   * Clear history (alias for clearStates)
+   */
+  public clearHistory(): void {
+    this.clearStates();
+  }
 }
