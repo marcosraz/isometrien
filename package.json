@@ -1,6 +1,8 @@
 {
   "name": "isometrics-app",
   "version": "0.0.0",
+  "description": "Isometric technical drawing application",
+  "author": "Zauner GmbH",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
@@ -8,7 +10,14 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:isometrics-app": "node dist/isometrics-app/server/server.mjs"
+    "serve:ssr:isometrics-app": "node dist/isometrics-app/server/server.mjs",
+    "electron": "npm run build:prod && electron electron/src/main.js",
+    "electron:dev": "NODE_ENV=development electron electron/src/main.js",
+    "build:prod": "ng build --configuration=production --base-href ./",
+    "build:electron": "npm run build:prod && electron-builder --config electron/electron-builder.json",
+    "build:win": "npm run build:prod && electron-builder --config electron/electron-builder.json --win",
+    "build:win-portable": "npm run build:prod && electron-builder --config electron/electron-builder.json --win portable",
+    "dist": "npm run build:win"
   },
   "prettier": {
     "overrides": [
@@ -44,6 +53,8 @@
     "@types/fabric": "^5.3.10",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^20.17.19",
+    "electron": "^38.1.2",
+    "electron-builder": "^26.0.12",
     "jasmine-core": "~5.8.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",

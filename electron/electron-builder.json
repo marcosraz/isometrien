@@ -1,0 +1,42 @@
+{
+  "appId": "com.zauner.isometrien",
+  "productName": "Isometrien",
+  "directories": {
+    "output": "electron/dist",
+    "buildResources": "electron/build-resources"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/src/**/*",
+    "!**/*.map",
+    "!**/*.ts",
+    "!**/*.scss"
+  ],
+  "extraMetadata": {
+    "main": "electron/src/main.js"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "perMachine": true,
+    "shortcutName": "Isometrien",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "menuCategory": true,
+    "artifactName": "Isometrien-Setup-${version}.${ext}"
+  },
+  "portable": {
+    "artifactName": "Isometrien-Portable-${version}.${ext}"
+  },
+  "compression": "maximum",
+  "npmRebuild": false,
+  "nodeGypRebuild": false
+}
