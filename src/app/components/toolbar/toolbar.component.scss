@@ -357,14 +357,14 @@ $transition-normal: all 0.3s ease;
   position: fixed;
   top: 0;
   left: $sidebar-width;
-  right: 0;
+  right: 200px; // Don't extend over grid controls
   height: $top-bar-height;
   background: white;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   align-items: center;
   padding: 0 20px;
-  transition: left $transition-normal;
+  transition: left $transition-normal, right $transition-normal;
   z-index: 900;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 
@@ -991,6 +991,194 @@ $transition-normal: all 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+}
+
+// ========================================
+// Mobile Tool Selection Bar
+// ========================================
+
+.mobile-tool-bar {
+  display: none; // Hidden on desktop by default
+  position: fixed;
+  top: 0; // Ganz oben!
+  left: 0;
+  right: 0;
+  background: $dark-bg;
+  border-bottom: 2px solid $border-color;
+  padding: 12px;
+  z-index: 1060; // Über allem!
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  align-items: center;
+  gap: 10px;
+
+  // Show ONLY on phones and tablets
+  @include mobile {
+    display: flex;
+  }
+
+  .tool-category-select {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    background: $darker-bg;
+    color: $text-primary;
+    border: 2px solid $border-color;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 180px;
+
+    // Touch-friendly on phones
+    @include phone-only {
+      @include touch-target-phone;
+      font-size: 16px;
+    }
+
+    &:hover {
+      border-color: $primary-color;
+      background: lighten($darker-bg, 5%);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $primary-color;
+      box-shadow: 0 0 0 3px rgba($primary-color, 0.2);
+    }
+
+    option {
+      background: $darker-bg;
+      color: $text-primary;
+      padding: 12px;
+    }
+  }
+
+  .mobile-quick-tools {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+
+    // Hide scrollbar but keep functionality
+    &::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: $border-color;
+      border-radius: 2px;
+    }
+  }
+
+  .mobile-tool-btn {
+    flex: 0 0 auto;
+    background: $darker-bg;
+    border: 2px solid $border-color;
+    border-radius: 8px;
+    color: $text-primary;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    min-height: 50px;
+
+    // Touch-friendly
+    @include phone-only {
+      min-width: 56px;
+      min-height: 56px;
+    }
+
+    .icon {
+      font-size: 24px;
+    }
+
+    &:hover {
+      background: lighten($darker-bg, 5%);
+      border-color: $primary-color;
+      transform: translateY(-2px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+
+    &.active {
+      background: $primary-color;
+      border-color: $primary-color;
+      color: white;
+
+      .icon {
+        animation: pulse 1.5s infinite;
+      }
+    }
+  }
+
+  .mobile-finish-line-btn {
+    flex: 0 0 auto;
+    background: #28a745;
+    border: 2px solid darken(#28a745, 10%);
+    border-radius: 8px;
+    color: white;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    // Touch-friendly
+    @include phone-only {
+      @include touch-target-phone;
+    }
+
+    .icon {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .label {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: lighten(#28a745, 5%);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+    }
+
+    &:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    // Pulse animation to draw attention
+    animation: finishButtonPulse 2s infinite;
+  }
+}
+
+@keyframes finishButtonPulse {
+  0%, 100% {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 2px 12px rgba(#28a745, 0.6);
+  }
+}
+
+// Hide desktop toolbars on mobile, show mobile-specific ones
+@include mobile {
+  .top-context-bar {
+    display: none; // Hide desktop context bar on mobile
+  }
+
+  .sidebar {
+    display: none; // Hide desktop sidebar on mobile
   }
 }
 

@@ -279,38 +279,36 @@ export class CanvasComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /**
    * Calculate canvas dimensions based on device type
-   * - Phone: Full width, minus bottom navigation (60px) and top bar (60px)
-   * - Tablet: Full width minus side navigation (80px), full height minus top bar (60px)
-   * - Desktop: Full width minus sidebar (260px), full height minus top bar (60px)
+   * - Phone: Full width, minus mobile tool bar (60px) at top
+   * - Tablet: Full width, minus mobile tool bar (60px) at top
+   * - Desktop: Use container dimensions (container already has margins applied)
    */
   private getCanvasDimensions(): { width: number; height: number } {
     const container = this.htmlCanvas.nativeElement.parentElement;
-    const topBarHeight = 60; // Top toolbar height
+    const mobileToolBarHeight = 60; // Mobile tool selection bar height
 
     switch (this.deviceType) {
       case 'phone':
-        // Full width, account for top bar and bottom mobile nav
-        const bottomNavHeight = 60;
+        // Full width, account for mobile tool bar at top
         return {
           width: container?.clientWidth || window.innerWidth,
-          height: (container?.clientHeight || window.innerHeight) - topBarHeight - bottomNavHeight
+          height: (container?.clientHeight || window.innerHeight) - mobileToolBarHeight
         };
 
       case 'tablet':
-        // Full width minus side navigation, full height minus top bar
-        const tabletSideNavWidth = 80;
+        // Full width, full height minus mobile tool bar (NO side navigation on tablet!)
         return {
-          width: (container?.clientWidth || window.innerWidth) - tabletSideNavWidth,
-          height: (container?.clientHeight || window.innerHeight) - topBarHeight
+          width: container?.clientWidth || window.innerWidth,
+          height: (container?.clientHeight || window.innerHeight) - mobileToolBarHeight
         };
 
       case 'desktop':
       default:
-        // Standard desktop layout with left sidebar
-        const desktopSidebarWidth = 260;
+        // Desktop: Use full container dimensions
+        // Container already has margin-left and margin-top applied via CSS
         return {
-          width: (container?.clientWidth || window.innerWidth) - desktopSidebarWidth,
-          height: (container?.clientHeight || window.innerHeight) - topBarHeight
+          width: container?.clientWidth || window.innerWidth,
+          height: container?.clientHeight || window.innerHeight
         };
     }
   }

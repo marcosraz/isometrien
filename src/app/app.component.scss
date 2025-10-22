@@ -1,3 +1,5 @@
+@import '../styles/breakpoints';
+
 .app-wrapper {
   display: flex;
   height: 100vh;
@@ -7,11 +9,17 @@
 
 .canvas-area {
   flex: 1;
-  margin-left: 260px; // Sidebar width
-  margin-top: 50px; // Top context bar height
+  margin-left: 260px; // Sidebar width on desktop
+  // No margin-top on desktop - canvas extends under top bar so grid is visible everywhere
   transition: margin-left 0.3s ease;
-  
+
   &.sidebar-collapsed {
     margin-left: 50px; // Collapsed sidebar width
+  }
+
+  // Mobile layout: no sidebar, only mobile toolbar at top
+  @include mobile {
+    margin-left: 0 !important; // No sidebar on mobile
+    margin-top: 60px; // Mobile toolbar height (padding 12px + content + border)
   }
 }

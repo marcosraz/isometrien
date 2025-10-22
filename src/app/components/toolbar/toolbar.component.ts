@@ -612,6 +612,51 @@ export class ToolbarComponent implements OnInit, OnDestroy {
     this.drawingService.clearCanvas();
   }
 
+  // ===== Mobile-specific methods =====
+
+  /**
+   * Called when mobile category dropdown changes
+   */
+  public onMobileCategoryChange(): void {
+    // The activeSection is already bound via ngModel
+    console.log(`Mobile category changed to: ${this.activeSection}`);
+  }
+
+  /**
+   * Check if currently drawing a line or pipe
+   */
+  public isDrawingLineOrPipe(): boolean {
+    const mode = this.drawingService.drawingMode;
+    return mode === 'addLine' || mode === 'addPipe';
+  }
+
+  /**
+   * Finish the current line/pipe drawing
+   * Acts as a replacement for double-click on mobile
+   */
+  public finishLine(): void {
+    const mode = this.drawingService.drawingMode;
+
+    if (mode === 'addPipe' || mode === 'addLine') {
+      // Simulate a double-click event to properly finish the pipe/line
+      // This calls the same method that a real double-click would call
+      const dummyEvent: any = {
+        target: null,
+        e: {} as MouseEvent
+      };
+
+      this.drawingService.handleDoubleClick(dummyEvent);
+      console.log(`${mode === 'addPipe' ? 'Pipe' : 'Line'} drawing finished via mobile button`);
+    }
+  }
+
+  /**
+   * Shortcut for addPipe (used in mobile toolbar)
+   */
+  public addPipe(): void {
+    this.startPiping();
+  }
+
   ngOnInit(): void {
     // Subscribe to device type changes
     this.deviceSubscription = this.platformService.deviceType$.subscribe(deviceType => {

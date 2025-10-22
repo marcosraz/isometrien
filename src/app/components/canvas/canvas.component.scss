@@ -25,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 100;
+  z-index: 1000; // Above top-context-bar (900)
 
   // Phone: Larger touch targets, move down to avoid toolbar overlap
   @include phone-only {
@@ -122,7 +122,7 @@
   padding: 8px;
   border-radius: 8px;
   border: 1px solid #ddd;
-  z-index: 100;
+  z-index: 1000; // Above top-context-bar (900)
 
   // Phone: Hide desktop zoom controls (mobile nav has its own)
   @include phone-only {

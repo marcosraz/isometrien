@@ -470,6 +470,217 @@
   </div>
 </div>
 
+<!-- Mobile Tool Selection Bar (only visible on phones/tablets) -->
+<div class="mobile-tool-bar">
+  <select class="tool-category-select"
+          [(ngModel)]="activeSection"
+          (change)="onMobileCategoryChange()">
+    <option value="drawing">✏️ Zeichnen</option>
+    <option value="measurement">📐 Bemaßung</option>
+    <option value="welding">⚡ Schweißen</option>
+    <option value="piping">🚰 Rohrleitungen</option>
+    <option value="isometry">📐 Isometrien</option>
+    <option value="objects">📦 Objekte</option>
+    <option value="file">📁 Datei</option>
+  </select>
+
+  <!-- Most used tools in current category (quick access) -->
+  <div class="mobile-quick-tools" [ngSwitch]="activeSection">
+    <!-- Drawing Tools -->
+    <ng-container *ngSwitchCase="'drawing'">
+      <button class="mobile-tool-btn" (click)="startFreehand()"
+              [class.active]="drawingService.drawingMode === 'freehand'"
+              title="Freihand">
+        <span class="icon">✏️</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="addLine()"
+              [class.active]="drawingService.drawingMode === 'addLine'"
+              title="Linie">
+        <span class="icon">📏</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="addPipe()"
+              [class.active]="drawingService.drawingMode === 'addPipe'"
+              title="Rohr">
+        <span class="icon">🔵</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="addText()"
+              title="Text">
+        <span class="icon">A</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('addAnchors')"
+              [class.active]="drawingService.drawingMode === 'addAnchors'"
+              title="Ankerpunkt">
+        <span class="icon">📍</span>
+      </button>
+    </ng-container>
+
+    <!-- Measurement Tools -->
+    <ng-container *ngSwitchCase="'measurement'">
+      <button class="mobile-tool-btn" (click)="setDimensionMode()"
+              [class.active]="drawingService.drawingMode === 'dimension'"
+              title="Bemaßung">
+        <span class="icon">📐</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="setIsoDimensionMode()"
+              title="ISO Bemaßung">
+        <span class="icon">📏</span>
+      </button>
+    </ng-container>
+
+    <!-- Welding Tools -->
+    <ng-container *ngSwitchCase="'welding'">
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('weld')"
+              [class.active]="drawingService.drawingMode === 'weld'"
+              title="Schweißpunkt">
+        <span class="icon">⚡</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('weldstamp')"
+              [class.active]="drawingService.drawingMode === 'weldstamp'"
+              title="Schweißstempel">
+        <span class="icon">🔲</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('welderstamp')"
+              [class.active]="drawingService.drawingMode === 'welderstamp'"
+              title="Schweißer">
+        <span class="icon">👷</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('welderstampempty')"
+              [class.active]="drawingService.drawingMode === 'welderstampempty'"
+              title="Leer">
+        <span class="icon">⬜</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('welderstampas')"
+              [class.active]="drawingService.drawingMode === 'welderstampas'"
+              title="AS Stempel">
+        <span class="icon">🔶</span>
+      </button>
+    </ng-container>
+
+    <!-- Piping Tools -->
+    <ng-container *ngSwitchCase="'piping'">
+      <button class="mobile-tool-btn" (click)="startPiping()"
+              [class.active]="drawingService.drawingMode === 'addPipe'"
+              title="Rohrleitung">
+        <span class="icon">🔧</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startMovePipe()"
+              [class.active]="isMovePipeActive()"
+              title="Verschieben">
+        <span class="icon">✋</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startMoveComponent()"
+              [class.active]="drawingService.drawingMode === 'moveComponent'"
+              title="Verschieben-B">
+        <span class="icon">🎯</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startFlow()"
+              [class.active]="drawingService.drawingMode === 'flow'"
+              title="Fließrichtung">
+        <span class="icon">➡️</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startTeeJoint()"
+              [class.active]="drawingService.drawingMode === 'teeJoint'"
+              title="T-Stück">
+        <span class="icon">⊥</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startGateValveS()"
+              [class.active]="drawingService.drawingMode === 'gateValveS'"
+              title="Gate Valve S">
+        <span class="icon">🚪</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startGateValveFL()"
+              [class.active]="drawingService.drawingMode === 'gateValveFL'"
+              title="Gate Valve FL">
+        <span class="icon">🚪</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startGlobeValveS()"
+              [class.active]="drawingService.drawingMode === 'globeValveS'"
+              title="Globe Valve S">
+        <span class="icon">🌐</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startGlobeValveFL()"
+              [class.active]="drawingService.drawingMode === 'globeValveFL'"
+              title="Globe Valve FL">
+        <span class="icon">🌐</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startBallValveS()"
+              [class.active]="drawingService.drawingMode === 'ballValveS'"
+              title="Ball Valve S">
+        <span class="icon">⚽</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startBallValveFL()"
+              [class.active]="drawingService.drawingMode === 'ballValveFL'"
+              title="Ball Valve FL">
+        <span class="icon">⚽</span>
+      </button>
+    </ng-container>
+
+    <!-- Isometry Tools -->
+    <ng-container *ngSwitchCase="'isometry'">
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('fluidstamp')"
+              [class.active]="drawingService.drawingMode === 'fluidstamp'"
+              title="Fluid">
+        <span class="icon">💧</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.setDrawingMode('spool')"
+              [class.active]="drawingService.drawingMode === 'spool'"
+              title="Spool">
+        <span class="icon">🔄</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="startSlope()"
+              [class.active]="drawingService.drawingMode === 'slope'"
+              title="Gefälle">
+        <span class="icon">🔻</span>
+      </button>
+    </ng-container>
+
+    <!-- Object Tools -->
+    <ng-container *ngSwitchCase="'objects'">
+      <button class="mobile-tool-btn" (click)="drawingService.groupSelectedObjects()"
+              title="Gruppieren">
+        <span class="icon">📦</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="ungroupObjects()"
+              title="Gruppierung aufheben">
+        <span class="icon">📂</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="drawingService.deleteSelectedObjects()"
+              title="Löschen">
+        <span class="icon">🗑️</span>
+      </button>
+    </ng-container>
+
+    <!-- File Tools -->
+    <ng-container *ngSwitchCase="'file'">
+      <button class="mobile-tool-btn" (click)="clearCanvas()"
+              title="Leeren">
+        <span class="icon">🗑️</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="exportAsPNG()"
+              title="PNG Export">
+        <span class="icon">🖼️</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="exportAsSVG()"
+              title="SVG Export">
+        <span class="icon">📐</span>
+      </button>
+      <button class="mobile-tool-btn" (click)="toggleBOMTable.emit()"
+              title="BOM Liste">
+        <span class="icon">📊</span>
+      </button>
+    </ng-container>
+  </div>
+
+  <!-- "Finish Line" button - only visible during line/pipe drawing -->
+  <button class="mobile-finish-line-btn"
+          *ngIf="isDrawingLineOrPipe()"
+          (click)="finishLine()"
+          title="Leitung beenden">
+    <span class="icon">✓</span>
+    <span class="label">Fertig</span>
+  </button>
+</div>
+
 <!-- Mobile Bottom Navigation (only visible on small screens) -->
 <div class="mobile-bottom-nav">
   <!-- Modifier Keys -->
