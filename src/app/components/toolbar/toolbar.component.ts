@@ -1,12 +1,17 @@
-import { Component, Output, EventEmitter } from '@angular/core';
+import { Component, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { DrawingService } from '../../services/drawing.service';
 import { LineDrawingService } from '../../services/line-drawing.service';
 import { DimensionService } from '../../services/dimension.service';
 import { ObjectManagementService } from '../../services/object-management.service';
 import { GridService } from '../../services/grid.service';
 import { ExportService } from '../../services/export.service';
+import { TouchEventService } from '../../services/touch-event.service';
+import { ZoomPanService } from '../../services/zoom-pan.service';
+import { StateManagementService } from '../../services/state-management.service';
+import { PlatformDetectionService, DeviceType } from '../../services/platform-detection.service';
 
 @Component({
   selector: 'app-toolbar',
@@ -15,7 +20,7 @@ import { ExportService } from '../../services/export.service';
   templateUrl: './toolbar.component.html',
   styleUrls: ['./toolbar.component.scss'],
 })
-export class ToolbarComponent {
+export class ToolbarComponent implements OnInit, OnDestroy {
   public snapToAngle: boolean = false;
   public snapTo15Angle: boolean = false;
   public snapTo45Angle: boolean = false;
@@ -33,6 +38,19 @@ export class ToolbarComponent {
   private escPressCount: number = 0;
   private escResetTimeout: any = null;
 
+  // Mobile-specific properties
+  public shiftKeyActive: boolean = false;
+  public ctrlKeyActive: boolean = false;
+  public currentZoom: number = 100;
+
+  // Platform detection
+  public deviceType: DeviceType = 'desktop';
+  public isPhone: boolean = false;
+  public isTablet: boolean = false;
+  public isDesktop: boolean = true;
+  public buttonSize: 'small' | 'medium' | 'large' = 'medium';
+  private deviceSubscription?: Subscription;
+
   @Output() toggleBOMTable = new EventEmitter<void>();
   
   constructor(
@@ -41,7 +59,11 @@ export class ToolbarComponent {
     private dimensionService: DimensionService,
     private objectManagementService: ObjectManagementService,
     public gridService: GridService,
-    private exportService: ExportService
+    private exportService: ExportService,
+    public touchEventService: TouchEventService,
+    public zoomPanService: ZoomPanService,
+    public stateManagement: StateManagementService,
+    public platformService: PlatformDetectionService
   ) {
     // Initialize color mode from drawing service
     this.colorMode = this.drawingService.colorMode;
@@ -590,7 +612,78 @@ export class ToolbarComponent {
     this.drawingService.clearCanvas();
   }
 
+  ngOnInit(): void {
+    // Subscribe to device type changes
+    this.deviceSubscription = this.platformService.deviceType$.subscribe(deviceType => {
+      this.deviceType = deviceType;
+      this.isPhone = deviceType === 'phone';
+      this.isTablet = deviceType === 'tablet';
+      this.isDesktop = deviceType === 'desktop';
+
+      // Update button size based on device
+      this.buttonSize = this.platformService.getRecommendedButtonSize();
+
+      console.log(`Device changed to: ${deviceType}, button size: ${this.buttonSize}`);
+    });
+
+    // Initialize with current state
+    this.deviceType = this.platformService.getDeviceType();
+    this.isPhone = this.platformService.isPhone();
+    this.isTablet = this.platformService.isTablet();
+    this.isDesktop = this.platformService.isDesktop();
+    this.buttonSize = this.platformService.getRecommendedButtonSize();
+
+    // Subscribe to zoom changes
+    this.zoomPanService.viewportState.subscribe(state => {
+      this.currentZoom = Math.round(state.zoom * 100);
+    });
+  }
+
+  ngOnDestroy(): void {
+    // Clean up subscriptions
+    this.deviceSubscription?.unsubscribe();
+  }
+
   public toggleBOM(): void {
     this.toggleBOMTable.emit();
+  }
+
+  // Mobile-specific methods
+  public toggleShiftKey(): void {
+    this.shiftKeyActive = !this.shiftKeyActive;
+    this.touchEventService.setShiftKeySimulation(this.shiftKeyActive);
+  }
+
+  public toggleCtrlKey(): void {
+    this.ctrlKeyActive = !this.ctrlKeyActive;
+    this.touchEventService.setCtrlKeySimulation(this.ctrlKeyActive);
+  }
+
+  public zoomIn(): void {
+    this.zoomPanService.zoomIn();
+    this.updateZoomLevel();
+  }
+
+  public zoomOut(): void {
+    this.zoomPanService.zoomOut();
+    this.updateZoomLevel();
+  }
+
+  public resetZoom(): void {
+    this.zoomPanService.resetZoom();
+    this.updateZoomLevel();
+  }
+
+  public fitToScreen(): void {
+    // Reset zoom to 100% and center view
+    this.zoomPanService.resetZoom();
+    this.updateZoomLevel();
+  }
+
+  private updateZoomLevel(): void {
+    // Subscribe to zoom changes
+    this.zoomPanService.viewportState.subscribe(state => {
+      this.currentZoom = Math.round(state.zoom * 100);
+    });
   }
 }

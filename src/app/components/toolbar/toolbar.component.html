@@ -469,3 +469,130 @@
     </span>
   </div>
 </div>
+
+<!-- Mobile Bottom Navigation (only visible on small screens) -->
+<div class="mobile-bottom-nav">
+  <!-- Modifier Keys -->
+  <div class="mobile-nav-section modifiers">
+    <button class="mobile-nav-btn modifier-btn"
+            (click)="toggleShiftKey()"
+            [class.active]="shiftKeyActive"
+            title="Shift-Taste simulieren (30° Snap)">
+      <span class="icon">⇧</span>
+      <span class="label">Shift</span>
+    </button>
+    <button class="mobile-nav-btn modifier-btn"
+            (click)="toggleCtrlKey()"
+            [class.active]="ctrlKeyActive"
+            title="Strg-Taste simulieren (Snap zu Ankerpunkten)">
+      <span class="icon">⌃</span>
+      <span class="label">Strg</span>
+    </button>
+  </div>
+
+  <!-- Zoom Controls -->
+  <div class="mobile-nav-section zoom">
+    <button class="mobile-nav-btn zoom-btn"
+            (click)="zoomOut()"
+            title="Herauszoomen">
+      <span class="icon">−</span>
+    </button>
+    <div class="zoom-display">{{ currentZoom }}%</div>
+    <button class="mobile-nav-btn zoom-btn"
+            (click)="zoomIn()"
+            title="Hineinzoomen">
+      <span class="icon">+</span>
+    </button>
+    <button class="mobile-nav-btn"
+            (click)="resetZoom()"
+            title="Zoom zurücksetzen">
+      <span class="icon">↺</span>
+    </button>
+    <button class="mobile-nav-btn"
+            (click)="fitToScreen()"
+            title="An Bildschirm anpassen">
+      <span class="icon">⛶</span>
+    </button>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="mobile-nav-section actions">
+    <button class="mobile-nav-btn"
+            (click)="stateManagement.undo()"
+            title="Rückgängig">
+      <span class="icon">↶</span>
+    </button>
+    <button class="mobile-nav-btn"
+            (click)="stateManagement.redo()"
+            title="Wiederholen">
+      <span class="icon">↷</span>
+    </button>
+    <button class="mobile-nav-btn"
+            (click)="drawingService.deleteSelectedObjects()"
+            title="Löschen">
+      <span class="icon">🗑️</span>
+    </button>
+  </div>
+</div>
+
+<!-- Tablet Side Navigation (only visible on tablets) -->
+<div class="tablet-side-nav" *ngIf="isTablet">
+  <!-- Modifier Keys -->
+  <div class="tablet-nav-section modifiers">
+    <button class="tablet-nav-btn modifier-btn"
+            (click)="toggleShiftKey()"
+            [class.active]="shiftKeyActive"
+            title="Shift-Taste (30° Snap)">
+      <span class="icon">⇧</span>
+    </button>
+    <button class="tablet-nav-btn modifier-btn"
+            (click)="toggleCtrlKey()"
+            [class.active]="ctrlKeyActive"
+            title="Strg-Taste (Anchor Snap)">
+      <span class="icon">⌃</span>
+    </button>
+  </div>
+
+  <div class="tablet-divider"></div>
+
+  <!-- Zoom Controls -->
+  <div class="tablet-nav-section zoom">
+    <button class="tablet-nav-btn"
+            (click)="zoomIn()"
+            title="Zoom In">
+      <span class="icon">+</span>
+    </button>
+    <div class="zoom-display-vertical">{{ currentZoom }}%</div>
+    <button class="tablet-nav-btn"
+            (click)="zoomOut()"
+            title="Zoom Out">
+      <span class="icon">−</span>
+    </button>
+    <button class="tablet-nav-btn"
+            (click)="resetZoom()"
+            title="Zoom zurücksetzen">
+      <span class="icon">↺</span>
+    </button>
+  </div>
+
+  <div class="tablet-divider"></div>
+
+  <!-- Quick Actions -->
+  <div class="tablet-nav-section actions">
+    <button class="tablet-nav-btn"
+            (click)="stateManagement.undo()"
+            title="Rückgängig">
+      <span class="icon">↶</span>
+    </button>
+    <button class="tablet-nav-btn"
+            (click)="stateManagement.redo()"
+            title="Wiederholen">
+      <span class="icon">↷</span>
+    </button>
+    <button class="tablet-nav-btn"
+            (click)="drawingService.deleteSelectedObjects()"
+            title="Löschen">
+      <span class="icon">🗑️</span>
+    </button>
+  </div>
+</div>

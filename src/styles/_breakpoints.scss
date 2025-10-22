@@ -1,0 +1,328 @@
+// ========================================
+// Responsive Breakpoints & Mixins
+// ========================================
+
+// Breakpoint Values
+$breakpoint-xs: 0;
+$breakpoint-sm: 600px;    // Phone Landscape
+$breakpoint-md: 768px;    // Tablet Portrait
+$breakpoint-lg: 1024px;   // Tablet Landscape / Small Desktop
+$breakpoint-xl: 1440px;   // Desktop
+$breakpoint-xxl: 1920px;  // Large Desktop
+
+// Phone specific
+$phone-portrait-max: 599px;
+$phone-landscape-min: 600px;
+$phone-landscape-max: 767px;
+
+// Tablet specific
+$tablet-portrait-min: 768px;
+$tablet-portrait-max: 1023px;
+$tablet-landscape-min: 1024px;
+$tablet-landscape-max: 1439px;
+
+// ========================================
+// Device-specific Mixins
+// ========================================
+
+/**
+ * Phone Portrait (0 - 599px)
+ * Small phones in vertical orientation
+ */
+@mixin phone-portrait {
+  @media (max-width: #{$phone-portrait-max}) {
+    @content;
+  }
+}
+
+/**
+ * Phone Landscape (600px - 767px)
+ * Phones in horizontal orientation
+ */
+@mixin phone-landscape {
+  @media (min-width: #{$phone-landscape-min}) and (max-width: #{$phone-landscape-max}) {
+    @content;
+  }
+}
+
+/**
+ * All Phones (0 - 767px)
+ * Both portrait and landscape
+ */
+@mixin phone-only {
+  @media (max-width: #{$phone-landscape-max}) {
+    @content;
+  }
+}
+
+/**
+ * Tablet Portrait (768px - 1023px)
+ * Tablets in vertical orientation
+ */
+@mixin tablet-portrait {
+  @media (min-width: #{$tablet-portrait-min}) and (max-width: #{$tablet-portrait-max}) {
+    @content;
+  }
+}
+
+/**
+ * Tablet Landscape (1024px - 1439px)
+ * Tablets in horizontal orientation
+ */
+@mixin tablet-landscape {
+  @media (min-width: #{$tablet-landscape-min}) and (max-width: #{$tablet-landscape-max}) {
+    @content;
+  }
+}
+
+/**
+ * All Tablets (768px - 1439px)
+ * Both portrait and landscape
+ */
+@mixin tablet-only {
+  @media (min-width: #{$tablet-portrait-min}) and (max-width: #{$tablet-landscape-max}) {
+    @content;
+  }
+}
+
+/**
+ * Desktop (1440px+)
+ * Desktop computers
+ */
+@mixin desktop {
+  @media (min-width: #{$breakpoint-xl}) {
+    @content;
+  }
+}
+
+/**
+ * Large Desktop (1920px+)
+ * Large desktop screens
+ */
+@mixin desktop-large {
+  @media (min-width: #{$breakpoint-xxl}) {
+    @content;
+  }
+}
+
+// ========================================
+// Combined Mixins
+// ========================================
+
+/**
+ * Mobile (Phone + Tablet)
+ * 0 - 1439px
+ */
+@mixin mobile {
+  @media (max-width: #{$tablet-landscape-max}) {
+    @content;
+  }
+}
+
+/**
+ * Tablet & Desktop
+ * 768px+
+ */
+@mixin tablet-and-up {
+  @media (min-width: #{$tablet-portrait-min}) {
+    @content;
+  }
+}
+
+/**
+ * Desktop only (excluding tablets)
+ * 1440px+
+ */
+@mixin desktop-only {
+  @media (min-width: #{$breakpoint-xl}) {
+    @content;
+  }
+}
+
+// ========================================
+// Orientation Mixins
+// ========================================
+
+/**
+ * Portrait orientation
+ */
+@mixin portrait {
+  @media (orientation: portrait) {
+    @content;
+  }
+}
+
+/**
+ * Landscape orientation
+ */
+@mixin landscape {
+  @media (orientation: landscape) {
+    @content;
+  }
+}
+
+// ========================================
+// Touch-specific Mixins
+// ========================================
+
+/**
+ * Touch devices
+ * Devices with pointer: coarse (touchscreens)
+ */
+@mixin touch-device {
+  @media (pointer: coarse) {
+    @content;
+  }
+}
+
+/**
+ * Non-touch devices
+ * Devices with pointer: fine (mouse/trackpad)
+ */
+@mixin pointer-device {
+  @media (pointer: fine) {
+    @content;
+  }
+}
+
+// ========================================
+// Utility Mixins
+// ========================================
+
+/**
+ * Custom breakpoint
+ * @param {number} $min - Minimum width
+ * @param {number} $max - Maximum width (optional)
+ */
+@mixin breakpoint($min, $max: null) {
+  @if $max {
+    @media (min-width: $min) and (max-width: $max) {
+      @content;
+    }
+  } @else {
+    @media (min-width: $min) {
+      @content;
+    }
+  }
+}
+
+/**
+ * Max width breakpoint
+ * @param {number} $max - Maximum width
+ */
+@mixin max-width($max) {
+  @media (max-width: $max) {
+    @content;
+  }
+}
+
+/**
+ * Min width breakpoint
+ * @param {number} $min - Minimum width
+ */
+@mixin min-width($min) {
+  @media (min-width: $min) {
+    @content;
+  }
+}
+
+// ========================================
+// Touch Target Sizes (Accessibility)
+// ========================================
+
+/**
+ * Minimum touch target size for phones
+ * Apple: 44x44px, Google: 48x48px
+ */
+@mixin touch-target-phone {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 12px;
+}
+
+/**
+ * Minimum touch target size for tablets
+ */
+@mixin touch-target-tablet {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+}
+
+/**
+ * Minimum click target size for desktop
+ */
+@mixin click-target-desktop {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 8px;
+}
+
+// ========================================
+// Example Usage in Components:
+// ========================================
+
+/*
+
+// Import at top of component SCSS:
+@import '../../../styles/breakpoints';
+
+// Usage examples:
+
+.my-component {
+  // Default styles (mobile first)
+  padding: 10px;
+  font-size: 14px;
+
+  // Phone portrait - extra large for easy touch
+  @include phone-portrait {
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  // Tablet - medium size
+  @include tablet-only {
+    padding: 14px;
+    font-size: 15px;
+  }
+
+  // Desktop - compact
+  @include desktop {
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+// Show/Hide based on device
+.phone-only-element {
+  display: block;
+
+  @include tablet-and-up {
+    display: none;
+  }
+}
+
+.tablet-only-element {
+  display: none;
+
+  @include tablet-only {
+    display: block;
+  }
+}
+
+// Touch targets
+.button {
+  @include phone-only {
+    @include touch-target-phone;
+  }
+
+  @include tablet-only {
+    @include touch-target-tablet;
+  }
+
+  @include desktop {
+    @include click-target-desktop;
+  }
+}
+
+*/

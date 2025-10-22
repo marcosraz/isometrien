@@ -1,14 +1,63 @@
 {
   "name": "isometrics-app",
   "version": "0.0.0",
+  "main": "electron.js",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
     "dev": "ng serve --hmr --poll=2000",
     "build": "ng build",
+    "build:electron": "ng build --configuration production --base-href ./",
+    "electron": "electron .",
+    "electron:build": "npm run build:electron && electron-builder",
+    "electron:build:win": "npm run build:electron && electron-builder --win",
+    "electron:build:mac": "npm run build:electron && electron-builder --mac",
+    "electron:build:linux": "npm run build:electron && electron-builder --linux",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "serve:ssr:isometrics-app": "node dist/isometrics-app/server/server.mjs"
+    "serve:ssr:isometrics-app": "node dist/isometrics-app/server/server.mjs",
+    "build:mobile": "ng build --configuration production",
+    "cap:sync": "cap sync",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "cap:run:android": "cap run android",
+    "cap:run:ios": "cap run ios",
+    "mobile:build": "npm run build:mobile && npm run cap:sync",
+    "mobile:android": "npm run mobile:build && npm run cap:open:android",
+    "mobile:ios": "npm run mobile:build && npm run cap:open:ios"
+  },
+  "build": {
+    "appId": "com.isometrics.app",
+    "productName": "Isometrics App",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "src/favicon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "src/favicon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "src/favicon.ico"
+    },
+    "buildDependenciesFromSource": false,
+    "nodeGypRebuild": false,
+    "npmRebuild": false
   },
   "prettier": {
     "overrides": [
@@ -22,6 +71,7 @@
   },
   "private": true,
   "dependencies": {
+    "@angular/cdk": "^20.2.9",
     "@angular/common": "^20.1.0",
     "@angular/compiler": "^20.1.0",
     "@angular/core": "^20.1.0",
@@ -30,6 +80,10 @@
     "@angular/platform-server": "^20.1.0",
     "@angular/router": "^20.1.0",
     "@angular/ssr": "^20.1.1",
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/ios": "^7.4.3",
     "express": "^5.1.0",
     "fabric": "^6.7.1",
     "rxjs": "~7.8.0",
@@ -44,6 +98,8 @@
     "@types/fabric": "^5.3.10",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^20.17.19",
+    "electron": "^38.2.1",
+    "electron-builder": "^26.0.12",
     "jasmine-core": "~5.8.0",
     "karma": "~6.4.0",
     "karma-chrome-launcher": "~3.2.0",
