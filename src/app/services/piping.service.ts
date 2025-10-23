@@ -32,6 +32,7 @@ export class PipingService {
   private hoveredTee: fabric.Rect | null = null;
   private hoveredTeeLines: fabric.Object[] = [];
   private teeOrientation: number = 0; // 0, 1, 2, 3 for 4 different orientations
+  private valveOrientation: number = 0; // 0, 1 for 2 different orientations (normal, mirrored)
   private lastMousePosition: { x: number; y: number } | null = null; // Track last mouse position
 
   constructor() {
@@ -48,6 +49,16 @@ export class PipingService {
         // Immediately update preview if we have a last mouse position
         if (this.lastMousePosition && this.canvas) {
           this.updateTeePreview(this.lastMousePosition);
+        }
+      }
+      if (e.key === 'Tab' && (this.gateValveSMode || this.gateValveFLMode || this.globeValveSMode || this.globeValveFLMode || this.ballValveSMode || this.ballValveFLMode)) {
+        e.preventDefault(); // Prevent default tab behavior
+        this.valveOrientation = (this.valveOrientation + 1) % 2;
+        console.log('Valve Orientation changed to:', this.valveOrientation === 0 ? 'Normal' : 'Mirrored');
+
+        // Immediately update preview if we have a last mouse position
+        if (this.lastMousePosition && this.canvas) {
+          this.updateValvePreview(this.lastMousePosition);
         }
       }
       if (e.key === 'Escape') {
@@ -1431,6 +1442,47 @@ export class PipingService {
     }
   }
 
+  private updateValvePreview(pointer: { x: number; y: number }): void {
+    if (!this.canvas) return;
+
+    const threshold = this.isShiftPressed ? 100 : 50;
+    const nearest = this.findNearestLine(pointer);
+
+    if (nearest && nearest.distance < threshold) {
+      const angle = this.calculateAngle(nearest.line);
+      const isMirrored = this.valveOrientation === 1;
+
+      // Clean up old preview
+      this.cleanupValvePreview();
+
+      // Create new preview based on current valve mode
+      if (this.gateValveSMode) {
+        this.previewValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, isMirrored);
+      } else if (this.gateValveFLMode) {
+        this.previewValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, isMirrored);
+      } else if (this.globeValveSMode) {
+        this.previewValve = this.createGlobeValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+      } else if (this.globeValveFLMode) {
+        this.previewValve = this.createGlobeValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+      } else if (this.ballValveSMode) {
+        this.previewValve = this.createBallValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+      } else if (this.ballValveFLMode) {
+        this.previewValve = this.createBallValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
+      }
+
+      if (this.previewValve) {
+        this.previewValve.set({
+          opacity: 0.7,
+          selectable: false,
+          evented: false
+        });
+        this.canvas.add(this.previewValve);
+      }
+
+      this.canvas.requestRenderAll();
+    }
+  }
+
   public handleMouseMove(options: any): void {
     if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode && !this.teeJointMode)) return;
 
@@ -1483,31 +1535,8 @@ export class PipingService {
         });
         this.canvas.add(this.previewArrow);
       } else if (this.gateValveMode || this.gateValveSMode || this.gateValveFLMode || this.globeValveSMode || this.globeValveFLMode || this.ballValveSMode || this.ballValveFLMode) {
-        // Update preview valve
-        this.cleanupValvePreview();
-        
-        if (this.gateValveSMode) {
-          this.previewValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
-        } else if (this.gateValveFLMode) {
-          this.previewValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
-        } else if (this.globeValveSMode) {
-          this.previewValve = this.createGlobeValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
-        } else if (this.globeValveFLMode) {
-          this.previewValve = this.createGlobeValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
-        } else if (this.ballValveSMode) {
-          this.previewValve = this.createBallValveS(nearest.closestPoint.x, nearest.closestPoint.y, angle);
-        } else if (this.ballValveFLMode) {
-          this.previewValve = this.createBallValveFL(nearest.closestPoint.x, nearest.closestPoint.y, angle);
-        }
-        
-        if (this.previewValve) {
-          this.previewValve.set({
-            opacity: 0.7,
-            selectable: false,
-            evented: false
-          });
-          this.canvas.add(this.previewValve);
-        }
+        // Update preview valve using dedicated method
+        this.updateValvePreview(pointer);
       } else if (this.teeJointMode) {
         // Update preview T-Stück using dedicated method
         this.updateTeePreview(pointer);
@@ -1560,7 +1589,7 @@ export class PipingService {
         let valveType: string;
         
         if (this.gateValveSMode) {
-          gateValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
+          gateValve = createGateValveSNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.valveOrientation === 1);
           valveType = 'Gate Valve S';
           
           // Füge eine eindeutige ID zum Ventil hinzu
@@ -1720,7 +1749,7 @@ export class PipingService {
             this.canvas.requestRenderAll();
           }
         } else if (this.gateValveFLMode) {
-          gateValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.isCtrlPressed);
+          gateValve = createGateValveFLNew(nearest.closestPoint.x, nearest.closestPoint.y, angle, this.valveOrientation === 1);
           valveType = 'Gate Valve FL';
           
           // Füge eine eindeutige ID zum Ventil hinzu

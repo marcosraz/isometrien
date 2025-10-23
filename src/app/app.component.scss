@@ -5,21 +5,49 @@
   height: 100vh;
   overflow: hidden;
   background: #f5f5f5;
+  margin: 0;
+  padding: 0;
 }
 
 .canvas-area {
   flex: 1;
   margin-left: 260px; // Sidebar width on desktop
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-right: 0;
+  padding: 0;
   // No margin-top on desktop - canvas extends under top bar so grid is visible everywhere
   transition: margin-left 0.3s ease;
+  height: 100vh; // Ensure full viewport height
+  position: relative;
+  overflow: hidden; // Prevent overflow beyond calculated height
 
   &.sidebar-collapsed {
     margin-left: 50px; // Collapsed sidebar width
   }
 
-  // Mobile layout: no sidebar, only mobile toolbar at top
-  @include mobile {
-    margin-left: 0 !important; // No sidebar on mobile
-    margin-top: 60px; // Mobile toolbar height (padding 12px + content + border)
+  // Tablet layout: only mobile toolbar at top, no bottom nav
+  @include tablet-only {
+    margin-left: 0 !important; // No sidebar on tablet
+    margin-top: 76px; // Mobile toolbar height (padding 12px*2 + min-height 50px + border 2px)
+    margin-bottom: 0;
+    height: calc(100vh - 76px); // Subtract mobile toolbar height
+  }
+
+  // Phone layout: mobile toolbar at top AND bottom nav
+  @include phone-only {
+    margin-left: 0 !important; // No sidebar on phone
+    margin-top: 76px; // Mobile toolbar height
+    margin-bottom: 68px; // Bottom nav height (padding 8px*2 + min-height 50px + border 2px)
+    height: calc(100vh - 76px - 68px); // Subtract both toolbars
+  }
+
+  // Ensure canvas component takes full height
+  app-canvas {
+    display: block;
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
   }
 }

@@ -758,9 +758,9 @@ $transition-normal: all 0.3s ease;
   display: none; // Hidden by default
   position: fixed;
   right: 0;
-  top: $top-bar-height;
+  top: 76px; // Mobile tool bar height (padding 12px*2 + min-height 50px + border 2px)
   width: 80px;
-  height: calc(100vh - #{$top-bar-height});
+  height: calc(100vh - 76px); // Full height minus mobile tool bar
   background: $dark-bg;
   border-left: 2px solid $border-color;
   z-index: 1050; // Above canvas, below mobile bottom nav
