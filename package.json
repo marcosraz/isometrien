@@ -71,7 +71,7 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/cdk": "^20.2.9",
+    "@angular/cdk": "^20.2.10",
     "@angular/common": "^20.1.0",
     "@angular/compiler": "^20.1.0",
     "@angular/core": "^20.1.0",
@@ -82,7 +82,7 @@
     "@angular/ssr": "^20.1.1",
     "@capacitor/android": "^7.4.3",
     "@capacitor/cli": "^7.4.3",
-    "@capacitor/core": "^7.4.3",
+    "@capacitor/core": "^7.4.4",
     "@capacitor/ios": "^7.4.3",
     "express": "^5.1.0",
     "fabric": "^6.7.1",

@@ -175,29 +175,65 @@ export function createGateValveFLNew(x: number, y: number, angle: number, mirror
   return group;
 }
 
-export function createTeeJoint(x: number, y: number, angle: number, mirrored: boolean = false, flipped: boolean = false): any {
+export function createTeeJoint(x: number, y: number, angle: number, orientation: number = 0): any {
   // T-Stück OHNE Group für exakte Positionierung
-  
+  // orientation: 0, 1, 2, 3 für 4 verschiedene Ausrichtungen (isometrische Winkel)
+
   // Länge der Liniensegmente - reduced to match valve size
   const segmentLength = 18;
   const branchLength = 22;
-  
-  // Berechne Abzweig-Winkel (60° oder -60° je nach Seite)
-  const branchAngle = flipped ? -60 : 60;
-  
-  // Berechne die finale Rotation für das T-Stück
-  let teeAngle = angle;
-  if (mirrored) {
-    teeAngle += 180;
+
+  // Normalisiere den Hauptlinien-Winkel
+  const normalizedAngle = ((angle % 360) + 360) % 360;
+
+  // Berechne den Branch-Winkel basierend auf der Hauptlinien-Richtung und der Orientierung
+  // Die isometrischen Winkel sind: 30°, 90°, 150°, 210°, 270°, 330°
+  let branchAngle: number;
+
+  // Finde heraus, welche isometrische Richtung die Hauptlinie hat
+  if ((normalizedAngle >= 20 && normalizedAngle <= 40)) {
+    // Hauptlinie ist bei 30° (rechts-unten)
+    // Mögliche Branch-Richtungen: 90°, 150°, 270°, 330°
+    const branchAngles = [90, 150, 270, 330];
+    branchAngle = branchAngles[orientation % 4];
+  } else if ((normalizedAngle >= 140 && normalizedAngle <= 160)) {
+    // Hauptlinie ist bei 150° (links-unten)
+    // Mögliche Branch-Richtungen: 30°, 90°, 210°, 270°
+    const branchAngles = [90, 210, 270, 30];
+    branchAngle = branchAngles[orientation % 4];
+  } else if ((normalizedAngle >= 80 && normalizedAngle <= 100)) {
+    // Hauptlinie ist bei 90° (vertikal nach unten)
+    // Mögliche Branch-Richtungen: 30°, 150°, 210°, 330°
+    const branchAngles = [30, 150, 210, 330];
+    branchAngle = branchAngles[orientation % 4];
+  } else if ((normalizedAngle >= 200 && normalizedAngle <= 220)) {
+    // Hauptlinie ist bei 210° (links-oben)
+    // Mögliche Branch-Richtungen: 90°, 150°, 270°, 330°
+    const branchAngles = [90, 150, 270, 330];
+    branchAngle = branchAngles[orientation % 4];
+  } else if ((normalizedAngle >= 260 && normalizedAngle <= 280)) {
+    // Hauptlinie ist bei 270° (vertikal nach oben)
+    // Mögliche Branch-Richtungen: 30°, 150°, 210°, 330°
+    const branchAngles = [30, 150, 210, 330];
+    branchAngle = branchAngles[orientation % 4];
+  } else if ((normalizedAngle >= 320 && normalizedAngle <= 340)) {
+    // Hauptlinie ist bei 330° (rechts-oben)
+    // Mögliche Branch-Richtungen: 30°, 90°, 210°, 270°
+    const branchAngles = [90, 210, 270, 30];
+    branchAngle = branchAngles[orientation % 4];
+  } else {
+    // Fallback für andere Winkel
+    const branchAngles = [30, 150, 210, 330];
+    branchAngle = branchAngles[orientation % 4];
   }
-  
+
   // Konvertiere zu Radians für Berechnungen
-  const angleRad = (teeAngle * Math.PI) / 180;
+  const angleRad = (angle * Math.PI) / 180;
   const cos = Math.cos(angleRad);
   const sin = Math.sin(angleRad);
-  
-  // Berechne Abzweig-Endpunkt (relativ zur horizontalen Linie bei 60° nach oben/unten)
-  const branchRad = ((90 + branchAngle) * Math.PI) / 180;
+
+  // Berechne Abzweig-Endpunkt mit absolutem isometrischem Winkel
+  const branchRad = (branchAngle * Math.PI) / 180;
   const branchEndXLocal = branchLength * Math.cos(branchRad);
   const branchEndYLocal = branchLength * Math.sin(branchRad);
   
@@ -207,17 +243,17 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
     x: x - segmentLength * cos,
     y: y - segmentLength * sin
   };
-  
+
   // Rechts auf der Hauptlinie
   const rightPoint = {
     x: x + segmentLength * cos,
     y: y + segmentLength * sin
   };
-  
-  // Ende des Abzweigs (rotiert)
+
+  // Ende des Abzweigs (mit absolutem isometrischem Winkel)
   const branchEndPoint = {
-    x: x + (branchEndXLocal * cos - branchEndYLocal * sin),
-    y: y + (branchEndXLocal * sin + branchEndYLocal * cos)
+    x: x + branchEndXLocal,
+    y: y + branchEndYLocal
   };
   
   // Erstelle eine eindeutige ID für dieses T-Stück
@@ -280,8 +316,8 @@ export function createTeeJoint(x: number, y: number, angle: number, mirrored: bo
   (selectionRect as any).teeData = {
     position: { x, y },
     angle: angle,
-    mirrored: mirrored,
-    flipped: flipped
+    orientation: orientation,
+    branchAngle: branchAngle
   };
   (selectionRect as any).teeLines = [leftLine, rightLine, branchLine];
   

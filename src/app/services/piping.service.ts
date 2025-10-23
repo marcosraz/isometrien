@@ -31,12 +31,24 @@ export class PipingService {
   private originalLineStroke: string | null = null;
   private hoveredTee: fabric.Rect | null = null;
   private hoveredTeeLines: fabric.Object[] = [];
+  private teeOrientation: number = 0; // 0, 1, 2, 3 for 4 different orientations
+  private lastMousePosition: { x: number; y: number } | null = null; // Track last mouse position
 
   constructor() {
     // Listen for keyboard events
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Shift') {
         this.isShiftPressed = true;
+      }
+      if (e.key === 'Tab' && this.teeJointMode) {
+        e.preventDefault(); // Prevent default tab behavior
+        this.teeOrientation = (this.teeOrientation + 1) % 4;
+        console.log('T-Stück Orientation changed to:', this.teeOrientation);
+
+        // Immediately update preview if we have a last mouse position
+        if (this.lastMousePosition && this.canvas) {
+          this.updateTeePreview(this.lastMousePosition);
+        }
       }
       if (e.key === 'Escape') {
         if (this.flowMode) {
@@ -1362,17 +1374,78 @@ export class PipingService {
     return group;
   }
 
+  private updateTeePreview(pointer: { x: number; y: number }): void {
+    if (!this.canvas) return;
+
+    const threshold = this.isShiftPressed ? 100 : 50;
+    const nearest = this.findNearestLine(pointer);
+
+    if (nearest && nearest.distance < threshold) {
+      const angle = this.calculateAngle(nearest.line);
+
+      // Clean up old preview
+      this.cleanupTeePreview();
+
+      // Create new preview
+      const teeJoint = createTeeJoint(
+        nearest.closestPoint.x,
+        nearest.closestPoint.y,
+        angle,
+        this.teeOrientation  // Use current orientation
+      );
+
+      if (teeJoint) {
+        // Store the selection rect for cleanup
+        this.previewTee = teeJoint;
+
+        // Add preview lines with reduced opacity
+        const lines = (teeJoint as any).lines;
+        if (lines) {
+          lines.forEach((line: any) => {
+            line.set({
+              opacity: 0.5,
+              selectable: false,
+              evented: false
+            });
+            this.canvas!.add(line);
+            this.previewTeeLines.push(line);
+          });
+        }
+
+        // Add preview anchors with reduced opacity
+        const anchors = (teeJoint as any).anchors;
+        if (anchors) {
+          anchors.forEach((anchor: fabric.Circle) => {
+            anchor.set({
+              opacity: 0.5,
+              selectable: false,
+              evented: false
+            });
+            this.canvas!.add(anchor);
+            this.previewTeeAnchors.push(anchor);
+          });
+        }
+      }
+
+      this.canvas.requestRenderAll();
+    }
+  }
+
   public handleMouseMove(options: any): void {
     if (!this.canvas || (!this.flowMode && !this.gateValveMode && !this.gateValveSMode && !this.gateValveFLMode && !this.globeValveSMode && !this.globeValveFLMode && !this.ballValveSMode && !this.ballValveFLMode && !this.teeJointMode)) return;
-    
+
     // Check Ctrl key directly from the mouse event
     if (options.e && options.e.ctrlKey !== undefined) {
       this.isCtrlPressed = options.e.ctrlKey;
     }
-    
+
     const pointer = this.canvas.getPointer(options.e);
+
+    // Store last mouse position for Tab key updates
+    this.lastMousePosition = pointer;
+
     const threshold = this.isShiftPressed ? 100 : 50; // Larger snap distance with Shift
-    
+
     // Spezielle Behandlung für T-Stück Hover-Events
     this.handleTeeHover(pointer);
     
@@ -1436,49 +1509,8 @@ export class PipingService {
           this.canvas.add(this.previewValve);
         }
       } else if (this.teeJointMode) {
-        // Update preview T-Stück
-        this.cleanupTeePreview();
-        
-        const teeJoint = createTeeJoint(
-          nearest.closestPoint.x, 
-          nearest.closestPoint.y, 
-          angle,
-          this.isCtrlPressed,  // Strg für Spiegelung
-          this.isShiftPressed  // Shift für Seitenwechsel
-        );
-        
-        if (teeJoint) {
-          // Store the selection rect for cleanup
-          this.previewTee = teeJoint;
-          
-          // Add preview lines with reduced opacity
-          const lines = (teeJoint as any).lines;
-          if (lines) {
-            lines.forEach((line: any) => {
-              line.set({
-                opacity: 0.5,
-                selectable: false,
-                evented: false
-              });
-              this.canvas!.add(line);
-              this.previewTeeLines.push(line);
-            });
-          }
-          
-          // Add preview anchors with reduced opacity
-          const anchors = (teeJoint as any).anchors;
-          if (anchors) {
-            anchors.forEach((anchor: fabric.Circle) => {
-              anchor.set({
-                opacity: 0.5,
-                selectable: false,
-                evented: false
-              });
-              this.canvas!.add(anchor);
-              this.previewTeeAnchors.push(anchor);
-            });
-          }
-        }
+        // Update preview T-Stück using dedicated method
+        this.updateTeePreview(pointer);
       }
     } else {
       this.cleanupPreview();
@@ -1897,11 +1929,10 @@ export class PipingService {
       } else if (this.teeJointMode) {
         // Add T-Stück
         const teeJoint = createTeeJoint(
-          nearest.closestPoint.x, 
-          nearest.closestPoint.y, 
+          nearest.closestPoint.x,
+          nearest.closestPoint.y,
           angle,
-          this.isCtrlPressed,  // Strg für Spiegelung
-          this.isShiftPressed  // Shift für Seitenwechsel
+          this.teeOrientation  // 0, 1, 2, 3 for 4 different branch orientations
         );
         
         // Füge eine eindeutige ID zum T-Stück hinzu
